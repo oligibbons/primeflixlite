@@ -1,5 +1,5 @@
 @file:Suppress("unused")
-package com.m3u.data.parser.xtream
+package com.example.primeflixlite.data.parser.xtream
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable

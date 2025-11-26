@@ -1,29 +1,25 @@
-package com.m3u.data.database.model
+package com.example.primeflixlite.data.local.entity
 
 import androidx.compose.runtime.Immutable
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import com.m3u.annotation.Exclude
-import com.m3u.annotation.Likable
-import com.m3u.data.parser.xtream.`XtreamChannelInfo.kt`
+import com.example.primeflixlite.Exclude
+import com.example.primeflixlite.Likable
+import com.example.primeflixlite.data.parser.xtream.XtreamChannelInfo
 import io.ktor.http.URLBuilder
 import io.ktor.http.Url
 import io.ktor.http.appendPathSegments
 import io.ktor.http.path
 import kotlinx.serialization.Serializable
 
-@Entity(
-    tableName = "streams"
-)
+@Entity(tableName = "streams")
 @Immutable
 @Serializable
 @Likable
 data class Channel(
     @ColumnInfo(name = "url")
     // playable url
-    // if its playlist type is in [Playlist.SERIES_TYPES]
-    // you should load its episodes instead of playing it.
     val url: String,
     @ColumnInfo(name = "group")
     val category: String,
@@ -53,16 +49,6 @@ data class Channel(
     val seen: Long = 0L,
     @ColumnInfo(name = "relation_id", defaultValue = "NULL")
     @Exclude
-    /**
-     * if it is from m3u, corresponds to 'channel-id' field in the EPG xml file.
-     * kodi adaptive: it may be 'tvg-id', if missing from the M3U file,
-     * the addon will use the 'tvg-name' tag to map the channel to the EPG.
-     * https://kodi.wiki/view/Add-on:PVR_IPTV_Simple_Client#Usage
-     *
-     * if it is xtream live, it may be epgChannelId.
-     * if it is xtream vod, it may be streamId.
-     * if it is xtream series, it may be seriesId.
-     */
     val relationId: String? = null
 ) {
     companion object {
@@ -73,12 +59,25 @@ data class Channel(
     }
 }
 
-fun Channel.copyXtreamEpisode(episode: `XtreamChannelInfo.kt`.Episode): Channel {
-    val url = Url(url)
-    val newUrl = URLBuilder(url)
-        .apply { path(*url.rawSegments.dropLast(1).toTypedArray()) }
+// Helper to convert a Series Episode into a playable Channel object
+fun Channel.copyXtreamEpisode(episode: XtreamChannelInfo.Episode): Channel {
+    val urlObj = Url(url)
+    // Construct the URL: basicUrl + /series/ + username/password/ + episodeId.extension
+    // The original URL is usually http://host:port/player_api.php...
+    // This logic assumes the 'url' field passed in is the base domain or playlist URL.
+    // Note: We might need to adjust this logic later depending on how we store playlist URLs.
+    // For now, we keep the logic generic using Ktor's URL builder.
+
+    val newUrl = URLBuilder(urlObj)
+        .apply {
+            // Remove 'player_api.php' or other segments if necessary,
+            // but usually we build this from the base domain.
+            // This is a simplified version of the original logic.
+            path(*urlObj.rawSegments.dropLast(1).toTypedArray())
+        }
         .appendPathSegments("${episode.id}.${episode.containerExtension}")
         .build()
+
     return copy(
         url = newUrl.toString(),
         title = episode.title.orEmpty()

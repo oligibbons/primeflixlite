@@ -1,4 +1,4 @@
-package com.m3u.data.parser.xtream
+package com.example.primeflixlite.data.parser.xtream
 
 import com.m3u.data.database.model.Channel
 import kotlinx.serialization.SerialName

@@ -1,16 +1,16 @@
-package com.m3u.data.parser.m3u
+package com.example.primeflixlite.data.parser.m3u
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import timber.log.Timber
+import android.util.Log
 import java.io.InputStream
 import javax.inject.Inject
 
-internal class `M3UParserImpl.kt` @Inject constructor() : M3UParser {
-    private val timber = Timber.tag("M3UParserImpl")
+class M3UParserImpl @Inject constructor() : M3UParser {
     companion object {
+        private const val TAG = "M3UParserImpl"
         private const val M3U_HEADER_MARK = "#EXTM3U"
         private const val M3U_INFO_MARK = "#EXTINF:"
         private const val KODI_MARK = "#KODIPROP:"
@@ -44,7 +44,7 @@ internal class `M3UParserImpl.kt` @Inject constructor() : M3UParser {
         while (lines.hasNext()) {
             currentLine = lines.next()
             while (currentLine.startsWith("#")) {
-                timber.d("Parsing protocol line: $currentLine")
+                // Log.d(TAG, "Parsing protocol line: $currentLine")
                 if (currentLine.startsWith(M3U_INFO_MARK)) {
                     infoMatch = infoRegex
                         .matchEntire(currentLine.drop(M3U_INFO_MARK.length).trim())
@@ -56,6 +56,8 @@ internal class `M3UParserImpl.kt` @Inject constructor() : M3UParser {
                 }
                 if (lines.hasNext()) {
                     currentLine = lines.next()
+                } else {
+                    break
                 }
             }
             if (infoMatch == null && !currentLine.startsWith("#")) continue
@@ -95,6 +97,5 @@ internal class `M3UParserImpl.kt` @Inject constructor() : M3UParser {
 
             emit(entry)
         }
-    }
-        .flowOn(Dispatchers.Default)
+    }.flowOn(Dispatchers.Default)
 }
