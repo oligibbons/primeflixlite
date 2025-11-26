@@ -1,14 +1,15 @@
 package com.example.primeflixlite.data.parser.m3u
 
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import android.util.Log
 import java.io.InputStream
-import javax.inject.Inject
+// Removed javax.inject.Inject import
 
-class M3UParserImpl @Inject constructor() : M3UParser {
+// Removed @Inject annotation
+class M3UParserImpl : M3UParser {
     companion object {
         private const val TAG = "M3UParserImpl"
         private const val M3U_HEADER_MARK = "#EXTM3U"
@@ -44,7 +45,6 @@ class M3UParserImpl @Inject constructor() : M3UParser {
         while (lines.hasNext()) {
             currentLine = lines.next()
             while (currentLine.startsWith("#")) {
-                // Log.d(TAG, "Parsing protocol line: $currentLine")
                 if (currentLine.startsWith(M3U_INFO_MARK)) {
                     infoMatch = infoRegex
                         .matchEntire(currentLine.drop(M3U_INFO_MARK.length).trim())

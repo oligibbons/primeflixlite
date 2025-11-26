@@ -8,7 +8,6 @@ import com.example.primeflixlite.Exclude
 import com.example.primeflixlite.Likable
 import com.example.primeflixlite.R
 import com.example.primeflixlite.data.parser.xtream.XtreamInput
-import com.example.primeflixlite.data.parser.xtream.XtreamParser
 import com.example.primeflixlite.startsWithAny
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
@@ -75,11 +74,8 @@ fun Playlist.epgUrlsOrXtreamXmlUrl(): List<String> = when (source) {
         when (type) {
             DataSource.Xtream.TYPE_LIVE -> {
                 val input = XtreamInput.decodeFromPlaylistUrl(url)
-                val epgUrl = XtreamParser.createXmlUrl(
-                    basicUrl = input.basicUrl,
-                    username = input.username,
-                    password = input.password
-                )
+                // Manually construct the XMLTV URL to avoid circular dependencies or missing parsers
+                val epgUrl = "${input.basicUrl}/xmltv.php?username=${input.username}&password=${input.password}"
                 listOf(epgUrl)
             }
             else -> emptyList()
@@ -118,7 +114,7 @@ sealed class DataSource(
     }
 }
 
-private object DataSourceSerializer : KSerializer<DataSource> {
+object DataSourceSerializer : KSerializer<DataSource> {
     override fun deserialize(decoder: Decoder): DataSource {
         return DataSource.of(decoder.decodeString())
     }

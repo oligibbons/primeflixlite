@@ -1,27 +1,20 @@
 package com.example.primeflixlite
 
-// 1. Dummy Annotations to satisfy the compiler
-package com.m3u.annotation {
-    annotation class Likable
-    annotation class Exclude
-}
+/**
+ * Annotation to exclude a field from logic processing (not necessarily Room persistence).
+ */
+@Target(AnnotationTarget.PROPERTY, AnnotationTarget.FIELD)
+annotation class Exclude
 
-// 2. Helper extension to fix string checks
-package com.m3u.core.util.basic {
-    fun String.startsWithAny(vararg prefixes: String, ignoreCase: Boolean = false): Boolean {
-        return prefixes.any { this.startsWith(it, ignoreCase) }
-    }
-}
+/**
+ * Marker annotation for entities that can be "Liked" or Favorited.
+ */
+@Target(AnnotationTarget.CLASS)
+annotation class Likable
 
-// 3. Dummy Resources to fix R.string references
-package com.m3u.i18n {
-    object R {
-        object string {
-            const val feat_setting_data_source_m3u = 0
-            const val feat_setting_data_source_epg = 0
-            const val feat_setting_data_source_xtream = 0
-            const val feat_setting_data_source_emby = 0
-            const val feat_setting_data_source_dropbox = 0
-        }
-    }
+/**
+ * Extension function to check if a string starts with any of the provided prefixes.
+ */
+fun String.startsWithAny(vararg prefixes: String, ignoreCase: Boolean = false): Boolean {
+    return prefixes.any { this.startsWith(it, ignoreCase) }
 }

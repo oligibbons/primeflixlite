@@ -7,11 +7,8 @@ import androidx.room.PrimaryKey
 import com.example.primeflixlite.Exclude
 import com.example.primeflixlite.Likable
 import com.example.primeflixlite.data.parser.xtream.XtreamChannelInfo
-import io.ktor.http.URLBuilder
-import io.ktor.http.Url
-import io.ktor.http.appendPathSegments
-import io.ktor.http.path
 import kotlinx.serialization.Serializable
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 @Entity(tableName = "streams")
 @Immutable
@@ -19,8 +16,7 @@ import kotlinx.serialization.Serializable
 @Likable
 data class Channel(
     @ColumnInfo(name = "url")
-    // playable url
-    val url: String,
+    val url: String, // playable url
     @ColumnInfo(name = "group")
     val category: String,
     @ColumnInfo(name = "title")
@@ -61,25 +57,24 @@ data class Channel(
 
 // Helper to convert a Series Episode into a playable Channel object
 fun Channel.copyXtreamEpisode(episode: XtreamChannelInfo.Episode): Channel {
-    val urlObj = Url(url)
-    // Construct the URL: basicUrl + /series/ + username/password/ + episodeId.extension
-    // The original URL is usually http://host:port/player_api.php...
-    // This logic assumes the 'url' field passed in is the base domain or playlist URL.
-    // Note: We might need to adjust this logic later depending on how we store playlist URLs.
-    // For now, we keep the logic generic using Ktor's URL builder.
+    // Replaced Ktor logic with OkHttp to avoid extra dependencies
+    val httpUrl = url.toHttpUrlOrNull()
 
-    val newUrl = URLBuilder(urlObj)
-        .apply {
-            // Remove 'player_api.php' or other segments if necessary,
-            // but usually we build this from the base domain.
-            // This is a simplified version of the original logic.
-            path(*urlObj.rawSegments.dropLast(1).toTypedArray())
-        }
-        .appendPathSegments("${episode.id}.${episode.containerExtension}")
-        .build()
+    val newUrl = if (httpUrl != null) {
+        // Xtream Codes logic: Base URL (player_api.php) -> Root URL + /series/ + ...
+        // We usually drop the last segment (e.g. 'player_api.php') and append the stream ID
+        httpUrl.newBuilder()
+            .removePathSegment(httpUrl.pathSize - 1)
+            .addPathSegment("${episode.id}.${episode.containerExtension}")
+            .build()
+            .toString()
+    } else {
+        // Fallback for non-standard URLs
+        "$url/${episode.id}.${episode.containerExtension}"
+    }
 
     return copy(
-        url = newUrl.toString(),
+        url = newUrl,
         title = episode.title.orEmpty()
     )
 }

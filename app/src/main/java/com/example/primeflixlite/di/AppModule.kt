@@ -12,11 +12,12 @@ import java.util.concurrent.TimeUnit
 // Manual Dependency Injection Container
 class AppModule(private val context: Context) {
 
-    // 1. Network Client (The Browser)
+    // 1. Network Client (Singleton)
+    // Shared between Xtream, M3U, and Repository to save socket connections/RAM
     private val okHttpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
+            .connectTimeout(15, TimeUnit.SECONDS) // Increased for slow IPTV servers
+            .readTimeout(15, TimeUnit.SECONDS)
             .build()
     }
 
@@ -27,7 +28,7 @@ class AppModule(private val context: Context) {
             PrimeFlixDatabase::class.java,
             "primeflix-lite.db"
         )
-            .fallbackToDestructiveMigration() // Wipes DB if you change the schema (good for dev)
+            .fallbackToDestructiveMigration()
             .build()
     }
 
@@ -40,7 +41,9 @@ class AppModule(private val context: Context) {
         PrimeFlixRepository(
             playlistDao = database.playlistDao(),
             channelDao = database.channelDao(),
-            xtreamParser = xtreamParser
+            xtreamParser = xtreamParser,
+            m3uParser = m3uParser,
+            okHttpClient = okHttpClient // Pass the EXISTING client, don't create a new one!
         )
     }
 }

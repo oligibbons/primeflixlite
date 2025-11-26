@@ -5,35 +5,24 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import androidx.room.Transaction
+import androidx.room.Update
 import com.example.primeflixlite.data.local.entity.Playlist
-import com.example.primeflixlite.data.local.entity.PlaylistWithChannels
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface PlaylistDao {
+    @Query("SELECT * FROM playlists ORDER BY title")
+    fun getAllPlaylists(): Flow<List<Playlist>>
+
+    @Query("SELECT * FROM playlists WHERE url = :url LIMIT 1")
+    suspend fun getPlaylist(url: String): Playlist?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertOrReplace(playlist: Playlist): Long
+    suspend fun insert(playlist: Playlist)
+
+    @Update
+    suspend fun update(playlist: Playlist)
 
     @Delete
     suspend fun delete(playlist: Playlist)
-
-    @Query("DELETE FROM playlists WHERE url = :url")
-    suspend fun deleteByUrl(url: String)
-
-    @Query("SELECT * FROM playlists")
-    fun observeAll(): Flow<List<Playlist>>
-
-    @Query("SELECT * FROM playlists WHERE url = :url")
-    suspend fun get(url: String): Playlist?
-
-    @Query("SELECT * FROM playlists WHERE url = :url")
-    fun observe(url: String): Flow<Playlist?>
-
-    @Transaction
-    @Query("SELECT * FROM playlists WHERE url = :url")
-    suspend fun getWithChannels(url: String): PlaylistWithChannels?
-
-    @Query("UPDATE playlists SET title = :title WHERE url = :url")
-    suspend fun updateTitle(url: String, title: String)
 }

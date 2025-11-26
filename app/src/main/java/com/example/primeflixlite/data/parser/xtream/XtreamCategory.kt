@@ -6,9 +6,9 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class XtreamCategory(
     @SerialName("category_id")
-    val categoryId: String?, // Changed to String to be safe, API sometimes returns ints or strings
+    val categoryId: String,
     @SerialName("category_name")
-    val categoryName: String?,
+    val categoryName: String,
     @SerialName("parent_id")
-    val parentId: Int?
+    val parentId: Int = 0
 )

@@ -1,6 +1,6 @@
 package com.example.primeflixlite.data.parser.xtream
 
-import com.m3u.data.database.model.Channel
+import com.example.primeflixlite.data.local.entity.Channel
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -8,52 +8,28 @@ sealed interface XtreamData
 
 @Serializable
 data class XtreamLive(
-//    @SerialName("added")
-//    val added: String?,
     @SerialName("category_id")
-    val categoryId: Int?,
-//    @SerialName("custom_sid")
-//    val customSid: String?,
-//    @SerialName("direct_source")
-//    val directSource: String?,
+    val categoryId: String? = null, // Changed to String to match typical API responses
     @SerialName("epg_channel_id")
-    val epgChannelId: String?,
+    val epgChannelId: String? = null,
     @SerialName("name")
-    val name: String?,
-//    @SerialName("num")
-//    val num: Int?,
+    val name: String? = null,
     @SerialName("stream_icon")
-    val streamIcon: String?,
+    val streamIcon: String? = null,
     @SerialName("stream_id")
-    val streamId: Int?,
+    val streamId: Int? = null,
     @SerialName("stream_type")
-    val streamType: String?,
-//    @SerialName("tv_archive")
-//    val tvArchive: Int?,
-//    @SerialName("tv_archive_duration")
-//    val tvArchiveDuration: Int?,
+    val streamType: String? = null,
 ) : XtreamData
 
 @Serializable
 data class XtreamVod(
-//    @SerialName("added")
-//    val added: String? = null,
     @SerialName("category_id")
-    val categoryId: Int? = null,
+    val categoryId: String? = null,
     @SerialName("container_extension")
     val containerExtension: String? = null,
-//    @SerialName("custom_sid")
-//    val customSid: String? = null,
-//    @SerialName("direct_source")
-//    val directSource: String? = null,
     @SerialName("name")
     val name: String? = null,
-//    @SerialName("num")
-//    val num: String? = null,
-//    @SerialName("rating")
-//    val rating: String? = null,
-//    @SerialName("rating_5based")
-//    val rating5based: String? = null,
     @SerialName("stream_icon")
     val streamIcon: String? = null,
     @SerialName("stream_id")
@@ -64,36 +40,14 @@ data class XtreamVod(
 
 @Serializable
 data class XtreamSerial(
-//    @SerialName("cast")
-//    val cast: String? = null,
     @SerialName("category_id")
-    val categoryId: Int? = null,
+    val categoryId: String? = null,
     @SerialName("cover")
     val cover: String? = null,
-//    @SerialName("director")
-//    val director: String? = null,
-//    @SerialName("episode_run_time")
-//    val episodeRunTime: String? = null,
-//    @SerialName("genre")
-//    val genre: String? = null,
-//    @SerialName("last_modified")
-//    val lastModified: String? = null,
     @SerialName("name")
     val name: String? = null,
-//    @SerialName("num")
-//    val num: String? = null,
-//    @SerialName("plot")
-//    val plot: String? = null,
-//    @SerialName("rating")
-//    val rating: String? = null,
-//    @SerialName("rating_5based")
-//    val rating5based: String? = null,
-//    @SerialName("releaseDate")
-//    val releaseDate: String? = null,
     @SerialName("series_id")
     val seriesId: Int? = null,
-//    @SerialName("youtube_trailer")
-//    val youtubeTrailer: String? = null
 ) : XtreamData
 
 fun XtreamLive.toChannel(
@@ -102,7 +56,6 @@ fun XtreamLive.toChannel(
     password: String,
     playlistUrl: String,
     category: String,
-    // one of "allowed_output_formats"
     containerExtension: String
 ): Channel = Channel(
     url = "$basicUrl/live/$username/$password/$streamId.$containerExtension",
@@ -120,7 +73,7 @@ fun XtreamVod.toChannel(
     playlistUrl: String,
     category: String
 ): Channel = Channel(
-    url = "$basicUrl/movie/$username/$password/$streamId.${containerExtension}",
+    url = "$basicUrl/movie/$username/$password/$streamId.${containerExtension ?: "mp4"}",
     category = category,
     title = name.orEmpty(),
     cover = streamIcon,

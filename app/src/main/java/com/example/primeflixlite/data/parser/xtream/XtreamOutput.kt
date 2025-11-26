@@ -1,10 +1,20 @@
-package com.m3u.data.parser.xtream
+package com.example.primeflixlite.data.parser.xtream
 
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class XtreamOutput(
-    val liveCategories: List<`XtreamCategory.kt`> = emptyList(),
-    val vodCategories: List<`XtreamCategory.kt`> = emptyList(),
-    val serialCategories: List<`XtreamCategory.kt`> = emptyList(),
+    @SerialName("live_categories")
+    val liveCategories: List<XtreamCategory> = emptyList(),
+    @SerialName("vod_categories")
+    val vodCategories: List<XtreamCategory> = emptyList(),
+    @SerialName("series_categories")
+    val serialCategories: List<XtreamCategory> = emptyList(),
+    @SerialName("allowed_output_formats")
     val allowedOutputFormats: List<String> = emptyList(),
+    @SerialName("server_protocol")
     val serverProtocol: String = "http",
-    val port: Int? = null
+    @SerialName("port")
+    val port: String? = null
 )
