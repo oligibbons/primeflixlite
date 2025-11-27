@@ -1,200 +1,186 @@
 package com.example.primeflixlite.ui.home
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.example.primeflixlite.R
 import com.example.primeflixlite.data.local.entity.Channel
 import com.example.primeflixlite.data.local.entity.Playlist
+import com.example.primeflixlite.data.local.entity.StreamType
+import com.example.primeflixlite.data.local.model.ChannelWithProgram
 import com.example.primeflixlite.ui.theme.NeonBlue
 import com.example.primeflixlite.ui.theme.NeonBlueDim
 import com.example.primeflixlite.ui.theme.VoidBlack
+import com.example.primeflixlite.util.TimeUtils
 
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
-    onChannelClick: (Channel) -> Unit
+    imageLoader: coil.ImageLoader,
+    onChannelClick: (Channel) -> Unit,
+    onSearchClick: () -> Unit
 ) {
-    val playlists by viewModel.playlists.collectAsState()
-    val channels by viewModel.currentChannels.collectAsState()
-    val selectedPlaylist by viewModel.selectedPlaylist.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
+    val initialFocusRequester = remember { FocusRequester() }
+    var hasFocused by remember { mutableStateOf(false) }
 
-    LaunchedEffect(playlists) {
-        if (selectedPlaylist == null && playlists.isNotEmpty()) {
-            viewModel.selectPlaylist(playlists.first())
+    LaunchedEffect(uiState.isLoading) {
+        if (!uiState.isLoading && !hasFocused) {
+            initialFocusRequester.requestFocus()
+            hasFocused = true
         }
     }
 
-    // Main Layout with Vignette Background for "Cinema" feel
-    Row(
+    BackHandler(enabled = uiState.selectedPlaylist != null) {
+        viewModel.backToPlaylists()
+    }
+
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(Color(0xFF121212), VoidBlack),
-                    radius = 1200f
-                )
-            )
+            .background(VoidBlack)
+            .padding(24.dp)
     ) {
-        // --- LEFT PANE: SIDEBAR ---
-        Column(
-            modifier = Modifier
-                .width(260.dp)
-                .fillMaxHeight()
-                .background(Color(0xFF0A0A0A)) // Slightly lighter than void
-                .padding(24.dp)
-        ) {
-            // BRANDING
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Using the White logo, tinted or just raw if it looks good against dark.
-                // Assuming "logo_spotlight" is too big, using text + icon or just text.
-                // Let's use the Spotlight logo cropped or just Text for cleanness.
-                // Text is usually sharper on low-res projectors.
-                Text(
-                    text = "PRIMEFLIX",
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        color = NeonBlue,
-                        letterSpacing = 2.sp
+        if (uiState.selectedPlaylist == null) {
+            Text("Select Playlist", style = MaterialTheme.typography.headlineMedium, color = Color.White)
+            LazyVerticalGrid(columns = GridCells.Fixed(2), modifier = Modifier.padding(top = 24.dp)) {
+                items(uiState.playlists) { playlist ->
+                    PlaylistRow(
+                        playlist = playlist,
+                        isSelected = false,
+                        onClick = { viewModel.selectPlaylist(playlist) }
                     )
-                )
-                Text(
-                    text = "+",
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        color = Color.White
-                    )
-                )
+                }
+            }
+            if (uiState.playlists.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Button(onClick = { viewModel.addSamplePlaylist() }) {
+                        Text("Load Sample Playlist")
+                    }
+                }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
-
-            if (playlists.isEmpty()) {
-                Button(
-                    onClick = { viewModel.addSamplePlaylist() },
-                    colors = ButtonDefaults.buttonColors(containerColor = NeonBlueDim)
-                ) {
-                    Text("Load Demo")
-                }
-            } else {
-                Text(
-                    text = "PLAYLISTS",
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(bottom = 12.dp, start = 4.dp)
-                )
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(playlists) { playlist ->
-                        PlaylistRow(
-                            playlist = playlist,
-                            isSelected = playlist == selectedPlaylist,
-                            onClick = { viewModel.selectPlaylist(playlist) }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    StreamType.values().forEach { type ->
+                        NavTab(
+                            title = type.name,
+                            isSelected = uiState.selectedTab == type,
+                            onClick = { viewModel.selectTab(type) }
                         )
                     }
                 }
+
+                var searchFocused by remember { mutableStateOf(false) }
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = "Search",
+                    tint = if(searchFocused) NeonBlue else Color.White,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .scale(if(searchFocused) 1.2f else 1f)
+                        .clickable { onSearchClick() }
+                        .onFocusChanged { searchFocused = it.isFocused }
+                        .focusable()
+                )
             }
-        }
 
-        // --- RIGHT PANE: CONTENT ---
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(24.dp)
-        ) {
-            if (selectedPlaylist != null) {
-                // HEADER
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = selectedPlaylist?.title ?: "",
-                        style = MaterialTheme.typography.headlineMedium,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-
-                    Button(
-                        onClick = { viewModel.syncCurrentPlaylist() },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.Transparent,
-                            contentColor = NeonBlue
-                        ),
-                        border = BorderStroke(1.dp, NeonBlueDim)
-                    ) {
-                        Text("SYNC")
-                    }
-                }
-
-                HorizontalDivider(color = Color.DarkGray.copy(alpha = 0.5f))
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // GRID
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 150.dp),
-                    contentPadding = PaddingValues(bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(20.dp)
-                ) {
-                    items(channels) { channel ->
-                        ChannelCard(channel = channel, onClick = { onChannelClick(channel) })
-                    }
+            if (uiState.isLoading) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = NeonBlue)
                 }
             } else {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Select a playlist to begin", style = MaterialTheme.typography.bodyLarge)
+                Column(modifier = Modifier.fillMaxSize()) {
+                    if (uiState.continueWatching.isNotEmpty()) {
+                        ContinueWatchingLane(
+                            title = "Continue Watching",
+                            items = uiState.continueWatching,
+                            imageLoader = imageLoader,
+                            onItemClick = { url ->
+                                val channel = uiState.displayedChannels.find { it.channel.url == url }?.channel
+                                if (channel != null) onChannelClick(channel)
+                            }
+                        )
+                    }
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(bottom = 24.dp).focusRequester(initialFocusRequester)
+                    ) {
+                        items(uiState.categories) { category ->
+                            CategoryPill(
+                                title = category,
+                                isSelected = category == uiState.selectedCategory,
+                                onClick = { viewModel.selectCategory(category) }
+                            )
+                        }
+                    }
+
+                    val isVod = uiState.selectedTab == StreamType.MOVIE || uiState.selectedTab == StreamType.SERIES
+                    val minSize = if (isVod) 140.dp else 180.dp
+
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = minSize),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        contentPadding = PaddingValues(bottom = 32.dp)
+                    ) {
+                        items(uiState.displayedChannels, key = { it.channel.id }) { item ->
+                            if (isVod) {
+                                MovieCard(
+                                    channel = item.channel,
+                                    imageLoader = imageLoader,
+                                    onClick = { onChannelClick(item.channel) }
+                                )
+                            } else {
+                                ChannelCard(
+                                    channelWithProgram = item,
+                                    imageLoader = imageLoader,
+                                    onClick = { onChannelClick(item.channel) }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -202,143 +188,90 @@ fun HomeScreen(
 }
 
 @Composable
-fun PlaylistRow(
-    playlist: Playlist,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
+fun PlaylistRow(playlist: Playlist, isSelected: Boolean, onClick: () -> Unit) {
     var isFocused by remember { mutableStateOf(false) }
-
-    // Logic: If selected, it's Blue. If focused, it's White bg (high contrast) or Brighter Blue.
-    // TV UX Rule: Focus state must be Obvious.
-
-    val backgroundColor = when {
-        isFocused -> Color.White
-        isSelected -> NeonBlue.copy(alpha = 0.15f)
-        else -> Color.Transparent
-    }
-
-    val contentColor = when {
-        isFocused -> Color.Black
-        isSelected -> NeonBlue
-        else -> Color.LightGray
-    }
-
-    val fontWeight = if (isSelected || isFocused) FontWeight.Bold else FontWeight.Normal
+    val borderColor = if (isFocused) NeonBlue else Color.Transparent
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(8.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(backgroundColor)
+            .background(if (isSelected) Color(0xFF1A1A1A) else Color.Transparent)
+            .border(BorderStroke(2.dp, borderColor), RoundedCornerShape(8.dp))
             .clickable { onClick() }
             .onFocusChanged { isFocused = it.isFocused }
             .focusable()
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Selection Indicator Dot
-        if (isSelected) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(if (isFocused) Color.Black else NeonBlue)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-        }
-
-        Text(
-            text = playlist.title,
-            color = contentColor,
-            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = fontWeight),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Text(text = playlist.title, color = if (isFocused) Color.White else Color.Gray)
     }
 }
 
 @Composable
-fun ChannelCard(
-    channel: Channel,
-    onClick: () -> Unit
-) {
+fun ChannelCard(channelWithProgram: ChannelWithProgram, imageLoader: coil.ImageLoader, onClick: () -> Unit) {
+    val channel = channelWithProgram.channel
+    val program = channelWithProgram.program
     var isFocused by remember { mutableStateOf(false) }
+    val scale = if (isFocused) 1.05f else 1f
+    val borderColor = if (isFocused) NeonBlue else Color.Transparent
 
-    // Glow Effect for TV Focus
-    val glowColor = if (isFocused) NeonBlue else Color.Transparent
-    val scale = if (isFocused) 1.1f else 1.0f
-    val elevation = if (isFocused) 8.dp else 0.dp
-
-    Card(
+    Column(
         modifier = Modifier
-            .aspectRatio(16f / 9f)
             .scale(scale)
-            .onFocusChanged { isFocused = it.isFocused }
+            .clip(RoundedCornerShape(12.dp))
+            .border(BorderStroke(2.dp, borderColor), RoundedCornerShape(12.dp))
+            .background(Color(0xFF1E1E1E))
             .clickable { onClick() }
+            .onFocusChanged { isFocused = it.isFocused }
             .focusable()
-            .shadow(elevation, RoundedCornerShape(12.dp), spotColor = glowColor),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF252525))
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.aspectRatio(16f / 9f).background(Color.Black)) {
             if (!channel.cover.isNullOrEmpty()) {
                 AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(channel.cover)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = channel.title,
+                    model = ImageRequest.Builder(LocalContext.current).data(channel.cover).crossfade(true).size(320, 180).build(),
+                    imageLoader = imageLoader,
+                    contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
-                // Stylish Fallback
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(Color(0xFF333333), Color(0xFF111111))
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = channel.title.take(1).uppercase(),
-                        style = MaterialTheme.typography.displayLarge.copy(fontSize = 40.sp),
-                        color = Color.DarkGray
-                    )
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(text = channel.title.take(1), color = Color.DarkGray)
                 }
             }
-
-            // Text Protection Gradient (Bottom Up)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.6f)
-                    .align(Alignment.BottomCenter)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black)
-                        )
-                    )
-            )
-
-            // Title
-            Text(
-                text = channel.title,
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium
-                ),
-                color = if (isFocused) NeonBlue else Color.White, // Text turns blue on focus
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(12.dp)
-            )
         }
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(text = channel.title, color = if (isFocused) Color.White else Color.LightGray, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (program != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(text = program.title, style = MaterialTheme.typography.bodySmall, color = NeonBlue, maxLines = 1)
+                LinearProgressIndicator(
+                    progress = { TimeUtils.getProgress(program.start, program.end) },
+                    modifier = Modifier.fillMaxWidth().height(2.dp).padding(top=4.dp),
+                    color = NeonBlue,
+                    trackColor = Color.DarkGray,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun CategoryPill(title: String, isSelected: Boolean, onClick: () -> Unit) {
+    var isFocused by remember { mutableStateOf(false) }
+    val bg = if (isSelected) NeonBlue else if (isFocused) Color.White else Color(0xFF333333)
+    val text = if (isSelected || isFocused) Color.Black else Color.White
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(bg)
+            .clickable { onClick() }
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Text(text = title, color = text, fontWeight = FontWeight.SemiBold)
     }
 }

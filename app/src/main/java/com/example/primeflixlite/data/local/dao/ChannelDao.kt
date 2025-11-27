@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import com.example.primeflixlite.data.local.entity.Channel
+import com.example.primeflixlite.data.local.model.ChannelWithProgram
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -13,11 +14,32 @@ interface ChannelDao {
     @Query("SELECT * FROM streams WHERE playlist_url = :playlistUrl ORDER BY `group`, title")
     fun getChannelsByPlaylist(playlistUrl: String): Flow<List<Channel>>
 
-    @Query("SELECT * FROM streams WHERE playlist_url = :playlistUrl")
-    suspend fun getChannelsByPlaylistSync(playlistUrl: String): List<Channel>
+    @Query("""
+        SELECT * FROM streams 
+        WHERE title LIKE '%' || :query || '%' 
+        OR `group` LIKE '%' || :query || '%'
+        LIMIT 50
+    """)
+    fun searchChannels(query: String): Flow<List<Channel>>
 
-    @Query("SELECT * FROM streams WHERE favourite = 1 ORDER BY title")
-    fun getFavouriteChannels(): Flow<List<Channel>>
+    // FIX: Updated aliases to match @ColumnInfo names (snake_case)
+    @Transaction
+    @Query("""
+        SELECT c.*, 
+               p.id as prog_id,
+               p.title as prog_title,
+               p.description as prog_description,
+               p.start as prog_start,
+               p.`end` as prog_end,
+               p.icon as prog_icon,
+               p.channel_id as prog_channel_id,
+               p.playlist_url as prog_playlist_url
+        FROM streams c
+        LEFT JOIN programmes p ON c.relation_id = p.channel_id 
+        AND :nowMillis >= p.start AND :nowMillis < p.`end`
+        WHERE c.playlist_url = :playlistUrl
+    """)
+    fun getChannelsWithEpg(playlistUrl: String, nowMillis: Long): Flow<List<ChannelWithProgram>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(channels: List<Channel>)
@@ -25,12 +47,9 @@ interface ChannelDao {
     @Query("DELETE FROM streams WHERE playlist_url = :playlistUrl")
     suspend fun deleteByPlaylist(playlistUrl: String)
 
-    @Query("SELECT COUNT(*) FROM streams WHERE playlist_url = :playlistUrl")
-    suspend fun countByPlaylist(playlistUrl: String): Int
-
     @Transaction
-    suspend fun replacePlaylistChannels(playlistUrl: String, newChannels: List<Channel>) {
+    suspend fun replacePlaylistChannels(playlistUrl: String, channels: List<Channel>) {
         deleteByPlaylist(playlistUrl)
-        insertAll(newChannels)
+        insertAll(channels)
     }
 }

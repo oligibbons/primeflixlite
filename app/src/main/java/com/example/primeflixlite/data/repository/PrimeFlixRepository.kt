@@ -3,31 +3,64 @@ package com.example.primeflixlite.data.repository
 import android.util.Log
 import com.example.primeflixlite.data.local.dao.ChannelDao
 import com.example.primeflixlite.data.local.dao.PlaylistDao
+import com.example.primeflixlite.data.local.dao.ProgrammeDao
+import com.example.primeflixlite.data.local.dao.WatchProgressDao
 import com.example.primeflixlite.data.local.entity.Channel
 import com.example.primeflixlite.data.local.entity.DataSource
 import com.example.primeflixlite.data.local.entity.Playlist
+import com.example.primeflixlite.data.local.entity.StreamType
+import com.example.primeflixlite.data.local.entity.WatchProgress
+import com.example.primeflixlite.data.local.model.ChannelWithProgram
 import com.example.primeflixlite.data.parser.m3u.M3UParser
 import com.example.primeflixlite.data.parser.m3u.toChannel
+import com.example.primeflixlite.data.parser.xmltv.XmltvParser
 import com.example.primeflixlite.data.parser.xtream.XtreamInput
 import com.example.primeflixlite.data.parser.xtream.XtreamParser
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
 
-// Removed @Inject for Manual DI
 class PrimeFlixRepository(
     private val playlistDao: PlaylistDao,
     private val channelDao: ChannelDao,
+    private val programmeDao: ProgrammeDao,
+    private val watchProgressDao: WatchProgressDao,
     private val xtreamParser: XtreamParser,
     private val m3uParser: M3UParser,
+    private val xmltvParser: XmltvParser,
     private val okHttpClient: OkHttpClient
 ) {
 
     val playlists = playlistDao.getAllPlaylists()
 
+    fun searchChannels(query: String) = channelDao.searchChannels(query)
+
+    fun getContinueWatching(type: StreamType) = watchProgressDao.getContinueWatching(type)
+
+    fun getRecentChannels() = watchProgressDao.getRecentChannels()
+
+    suspend fun saveProgress(url: String, position: Long, duration: Long) {
+        if (position < 5000) return
+        val progress = WatchProgress(
+            channelUrl = url,
+            position = position,
+            duration = duration,
+            lastPlayed = System.currentTimeMillis()
+        )
+        watchProgressDao.saveProgress(progress)
+    }
+
     fun getChannels(playlistUrl: String) = channelDao.getChannelsByPlaylist(playlistUrl)
+
+    fun getChannelsWithEpg(playlistUrl: String): Flow<List<ChannelWithProgram>> {
+        return channelDao.getChannelsWithEpg(playlistUrl, System.currentTimeMillis())
+    }
+
+    suspend fun getCurrentProgram(channelId: String) =
+        programmeDao.getCurrentProgram(channelId, System.currentTimeMillis())
 
     suspend fun addPlaylist(title: String, url: String, source: DataSource) {
         val playlist = Playlist(title = title, url = url, source = source)
@@ -38,77 +71,110 @@ class PrimeFlixRepository(
     suspend fun syncPlaylist(playlist: Playlist) = withContext(Dispatchers.IO) {
         try {
             val channels = when (playlist.source) {
-                DataSource.Xtream -> fetchXtreamChannels(playlist)
-                DataSource.M3U -> fetchM3UChannels(playlist)
+                DataSource.Xtream -> fetchXtreamData(playlist)
+                DataSource.M3U -> fetchM3UData(playlist)
                 else -> emptyList()
             }
 
             if (channels.isNotEmpty()) {
                 channelDao.replacePlaylistChannels(playlist.url, channels)
-                Log.d("PrimeFlixRepo", "Synced ${channels.size} channels for ${playlist.title}")
+                Log.d("PrimeFlixRepo", "Synced ${channels.size} items for ${playlist.title}")
+
+                if (channels.any { it.type == StreamType.LIVE }) {
+                    syncEpg(playlist)
+                }
             }
         } catch (e: Exception) {
-            Log.e("PrimeFlixRepo", "Error syncing playlist: ${e.message}")
-            e.printStackTrace()
+            Log.e("PrimeFlixRepo", "Error syncing playlist", e)
         }
     }
 
-    private suspend fun fetchXtreamChannels(playlist: Playlist): List<Channel> {
+    private suspend fun fetchXtreamData(playlist: Playlist): List<Channel> {
         val input = XtreamInput.decodeFromPlaylistUrl(playlist.url)
-        val channels = mutableListOf<Channel>()
+        val items = mutableListOf<Channel>()
 
-        // 1. Live Streams
         try {
-            val liveStreams = xtreamParser.getLiveStreams(input)
-            channels.addAll(liveStreams.map {
+            val live = xtreamParser.getLiveStreams(input)
+            items.addAll(live.map {
                 Channel(
-                    url = "${input.basicUrl}/live/${input.username}/${input.password}/${it.streamId}.ts",
-                    category = it.categoryId ?: "Uncategorized",
-                    title = it.name.orEmpty(),
-                    cover = it.streamIcon,
                     playlistUrl = playlist.url,
-                    relationId = it.epgChannelId
-                )
-            })
-        } catch (e: Exception) { Log.w("PrimeFlixRepo", "Failed to fetch Live: ${e.message}") }
-
-        // 2. VOD Streams
-        try {
-            val vodStreams = xtreamParser.getVodStreams(input)
-            channels.addAll(vodStreams.map {
-                Channel(
-                    url = "${input.basicUrl}/movie/${input.username}/${input.password}/${it.streamId}.${it.containerExtension}",
-                    category = "VOD",
                     title = it.name.orEmpty(),
+                    group = it.categoryId ?: "Uncategorized",
+                    url = "${input.basicUrl}/live/${input.username}/${input.password}/${it.streamId}.ts",
                     cover = it.streamIcon,
-                    playlistUrl = playlist.url
+                    type = StreamType.LIVE,
+                    relationId = it.epgChannelId,
+                    streamId = it.streamId.toString()
                 )
             })
-        } catch (e: Exception) { Log.w("PrimeFlixRepo", "Failed to fetch VOD: ${e.message}") }
+        } catch (e: Exception) { Log.w("PrimeFlixRepo", "Xtream Live Failed", e) }
 
-        return channels
+        try {
+            val vods = xtreamParser.getVodStreams(input)
+            items.addAll(vods.map {
+                Channel(
+                    playlistUrl = playlist.url,
+                    title = it.name.orEmpty(),
+                    group = "Movies",
+                    url = "${input.basicUrl}/movie/${input.username}/${input.password}/${it.streamId}.${it.containerExtension}",
+                    cover = it.streamIcon,
+                    type = StreamType.MOVIE,
+                    streamId = it.streamId.toString()
+                )
+            })
+        } catch (e: Exception) { Log.w("PrimeFlixRepo", "Xtream VOD Failed", e) }
+
+        try {
+            val series = xtreamParser.getSeries(input)
+            items.addAll(series.map {
+                Channel(
+                    playlistUrl = playlist.url,
+                    title = it.name.orEmpty(),
+                    group = "Series",
+                    url = "",
+                    cover = it.cover,
+                    type = StreamType.SERIES,
+                    streamId = it.seriesId.toString()
+                )
+            })
+        } catch (e: Exception) { Log.w("PrimeFlixRepo", "Xtream Series Failed", e) }
+
+        return items
     }
 
-    private suspend fun fetchM3UChannels(playlist: Playlist): List<Channel> {
-        return try {
-            val request = Request.Builder().url(playlist.url).build()
-            val response = okHttpClient.newCall(request).execute()
+    private suspend fun fetchM3UData(playlist: Playlist): List<Channel> {
+        val request = Request.Builder().url(playlist.url).build()
+        val response = okHttpClient.newCall(request).execute()
+        val inputStream = response.body?.byteStream() ?: return emptyList()
 
-            if (!response.isSuccessful) throw IOException("Unexpected code $response")
+        val items = mutableListOf<Channel>()
+        // Using the extension function we imported
+        m3uParser.parse(inputStream).collect { m3u ->
+            items.add(m3u.toChannel(playlist.url))
+        }
+        return items
+    }
 
-            val inputStream = response.body?.byteStream() ?: return emptyList()
-
-            // Parse the stream and map to Channel entities
-            // Note: toList() is a terminal operator for Flow
-            val m3uDataList = mutableListOf<com.example.primeflixlite.data.parser.m3u.M3UData>()
-            m3uParser.parse(inputStream).collect {
-                m3uDataList.add(it)
+    private suspend fun syncEpg(playlist: Playlist) {
+        try {
+            val epgUrl = when(playlist.source) {
+                DataSource.Xtream -> {
+                    val input = XtreamInput.decodeFromPlaylistUrl(playlist.url)
+                    "${input.basicUrl}/xmltv.php?username=${input.username}&password=${input.password}"
+                }
+                DataSource.M3U -> {
+                    if (playlist.url.contains("SamsungTVPlus")) "https://i.mjh.nz/SamsungTVPlus/us.xml" else null
+                }
+                else -> null
             }
 
-            m3uDataList.map { it.toChannel(playlist.url) }
-        } catch (e: Exception) {
-            Log.e("PrimeFlixRepo", "M3U Parse Error", e)
-            emptyList()
-        }
+            if (epgUrl != null) {
+                programmeDao.deleteOldProgrammes(System.currentTimeMillis())
+                xmltvParser.parse(epgUrl).collect { batch ->
+                    val validBatch = batch.map { it.copy(playlistUrl = playlist.url) }
+                    programmeDao.insertAll(validBatch)
+                }
+            }
+        } catch (e: Exception) { Log.e("PrimeFlixRepo", "EPG Sync Failed", e) }
     }
 }

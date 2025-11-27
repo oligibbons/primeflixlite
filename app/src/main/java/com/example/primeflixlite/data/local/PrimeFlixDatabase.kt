@@ -6,18 +6,26 @@ import androidx.room.TypeConverters
 import com.example.primeflixlite.data.local.dao.ChannelDao
 import com.example.primeflixlite.data.local.dao.PlaylistDao
 import com.example.primeflixlite.data.local.dao.ProgrammeDao
+import com.example.primeflixlite.data.local.dao.WatchProgressDao
 import com.example.primeflixlite.data.local.entity.Channel
 import com.example.primeflixlite.data.local.entity.Playlist
 import com.example.primeflixlite.data.local.entity.Programme
+import com.example.primeflixlite.data.local.entity.WatchProgress
 
 @Database(
-    entities = [Channel::class, Playlist::class, Programme::class],
-    version = 1,
+    entities = [
+        Playlist::class,
+        Channel::class,
+        Programme::class,
+        WatchProgress::class // NEW: Register the history table
+    ],
+    version = 4, // Version Bump: Added WatchProgress
     exportSchema = false
 )
 @TypeConverters(Converters::class)
 abstract class PrimeFlixDatabase : RoomDatabase() {
-    abstract fun channelDao(): ChannelDao
     abstract fun playlistDao(): PlaylistDao
+    abstract fun channelDao(): ChannelDao
     abstract fun programmeDao(): ProgrammeDao
+    abstract fun watchProgressDao(): WatchProgressDao // NEW: Expose the DAO
 }

@@ -5,11 +5,12 @@ import com.example.primeflixlite.di.AppModule
 
 class PrimeFlixApplication : Application() {
 
-    // Expose the container to the rest of the app
-    lateinit var container: AppModule
+    // Renamed 'container' to 'appModule' for consistency with UI calls
+    lateinit var appModule: AppModule
 
     override fun onCreate() {
         super.onCreate()
-        container = AppModule(this)
+        // Initialize the Dependency Injection container
+        appModule = AppModule(this)
     }
 }
