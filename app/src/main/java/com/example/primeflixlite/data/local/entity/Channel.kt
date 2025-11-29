@@ -2,10 +2,10 @@ package com.example.primeflixlite.data.local.entity
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Ignore
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-// CRITICAL: Force table name to 'streams' to match your existing DAO queries
 @Entity(
     tableName = "streams",
     indices = [
@@ -21,12 +21,9 @@ data class Channel(
     @ColumnInfo(name = "playlist_url")
     val playlistUrl: String,
 
-    // Core Data
     @ColumnInfo(name = "title")
     val title: String,
 
-    // 'group' is a reserved SQL keyword, so we map it to a safe column name if needed,
-    // but legacy DB uses "group", so we keep the field name 'group'.
     @ColumnInfo(name = "group")
     val group: String = "Uncategorized",
 
@@ -36,16 +33,23 @@ data class Channel(
     @ColumnInfo(name = "cover")
     val cover: String? = null,
 
-    // New VOD fields
+    // FIX: Store as String to prevent KSP recursion
     @ColumnInfo(name = "type")
-    val type: StreamType = StreamType.LIVE,
+    val type: String = StreamType.LIVE.name,
 
     @ColumnInfo(name = "relation_id")
-    val relationId: String? = null, // EPG ID
+    val relationId: String? = null,
 
     @ColumnInfo(name = "stream_id")
     val streamId: String? = null
 ) {
-    // Helper for UI compatibility
     val category: String get() = group
+
+    // Helper to get the Enum when needed
+    val streamType: StreamType
+        @Ignore get() = try {
+            StreamType.valueOf(type)
+        } catch (e: Exception) {
+            StreamType.LIVE
+        }
 }

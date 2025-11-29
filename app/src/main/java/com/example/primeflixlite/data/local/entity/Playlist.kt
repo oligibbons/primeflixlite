@@ -3,6 +3,7 @@ package com.example.primeflixlite.data.local.entity
 import androidx.compose.runtime.Immutable
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Ignore
 import androidx.room.PrimaryKey
 import com.example.primeflixlite.Exclude
 import com.example.primeflixlite.Likable
@@ -25,9 +26,11 @@ data class Playlist(
     @ColumnInfo(name = "hidden_groups", defaultValue = "[]")
     @Exclude
     val hiddenCategories: List<String> = emptyList(),
-    @ColumnInfo(name = "source", defaultValue = "0")
-    @Serializable(with = DataSourceSerializer::class)
-    val source: DataSource = DataSource.M3U,
+
+    // FIX: Store as String to prevent KSP recursion
+    @ColumnInfo(name = "source", defaultValue = "m3u")
+    val source: String = DataSource.M3U.value,
+
     @ColumnInfo(name = "user_agent", defaultValue = "NULL")
     @Exclude
     val userAgent: String? = null,
@@ -39,10 +42,11 @@ data class Playlist(
     @Exclude
     val autoRefreshProgrammes: Boolean = false
 ) {
+    // Helper to get the typed object when needed in UI/Logic
+    val dataSource: DataSource
+        @Ignore get() = DataSource.of(source)
+
     companion object {
         const val URL_IMPORTED = "imported"
-        // Ensure these reference the DataSource class (which is now in its own file)
-        val SERIES_TYPES = arrayOf(DataSource.Xtream.TYPE_SERIES)
-        val VOD_TYPES = arrayOf(DataSource.Xtream.TYPE_VOD)
     }
 }

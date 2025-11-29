@@ -45,9 +45,7 @@ dependencies {
     // --- Core Android & Compose ---
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    // ADDED THIS LINE:
     implementation(libs.androidx.lifecycle.viewmodel.compose)
-
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -57,18 +55,15 @@ dependencies {
 
     // --- PRIMEFLIX ADDITIONS ---
 
-    // 1. Room Database (The Memory)
-    // Downgraded to alpha11 to match Kotlin 2.0.21 and fix StackOverflowError
-    val room_version = "2.7.0-alpha11"
-    implementation("androidx.room:room-runtime:$room_version")
-    implementation("androidx.room:room-ktx:$room_version")
-    ksp("androidx.room:room-compiler:$room_version")
+    // 1. Room Database (STABLE VERSION)
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
 
     // 2. Retrofit (The Networking)
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    // Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 
     // 3. Coil (Image Loading)

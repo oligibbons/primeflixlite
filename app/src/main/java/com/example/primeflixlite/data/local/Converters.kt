@@ -2,6 +2,7 @@ package com.example.primeflixlite.data.local
 
 import androidx.room.TypeConverter
 import com.example.primeflixlite.data.local.entity.DataSource
+import com.example.primeflixlite.data.local.entity.StreamType
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -34,5 +35,19 @@ class Converters {
     @TypeConverter
     fun toDataSource(value: String): DataSource {
         return DataSource.of(value)
+    }
+
+    @TypeConverter
+    fun fromStreamType(type: StreamType): String {
+        return type.name
+    }
+
+    @TypeConverter
+    fun toStreamType(value: String): StreamType {
+        return try {
+            StreamType.valueOf(value)
+        } catch (e: Exception) {
+            StreamType.LIVE
+        }
     }
 }
