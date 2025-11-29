@@ -151,10 +151,12 @@ fun SearchResultCard(channel: Channel, imageLoader: coil.ImageLoader, onClick: (
                 }
             }
             // Type Badge
+            // FIX: Use when on String type with exhaustive else
             val badgeColor = when(channel.type) {
-                StreamType.LIVE -> Color.Red
-                StreamType.MOVIE -> NeonBlue
-                StreamType.SERIES -> Color.Yellow
+                StreamType.LIVE.name -> Color.Red
+                StreamType.MOVIE.name -> NeonBlue
+                StreamType.SERIES.name -> Color.Yellow
+                else -> Color.Gray
             }
             Box(
                 modifier = Modifier
@@ -163,7 +165,8 @@ fun SearchResultCard(channel: Channel, imageLoader: coil.ImageLoader, onClick: (
                     .padding(horizontal = 6.dp, vertical = 2.dp)
             ) {
                 Text(
-                    text = channel.type.name.take(1),
+                    // FIX: type is already String, no .name needed
+                    text = channel.type.take(1),
                     color = Color.Black,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold

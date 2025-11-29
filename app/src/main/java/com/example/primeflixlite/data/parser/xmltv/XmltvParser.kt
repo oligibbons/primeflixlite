@@ -19,7 +19,7 @@ class XmltvParser(
 ) {
     // XMLTV dates are usually "yyyyMMddHHmmss Z"
     private val dateFormat = SimpleDateFormat("yyyyMMddHHmmss Z", Locale.getDefault()).apply {
-        timeZone = TimeZone.getTimeZone("UTC") // Usually UTC in XMLTV
+        timeZone = TimeZone.getTimeZone("UTC")
     }
 
     fun parse(url: String): Flow<List<Programme>> = flow {
@@ -37,14 +37,12 @@ class XmltvParser(
                 if (parser.eventType == XmlPullParser.START_TAG && parser.name == "programme") {
                     readProgramme(parser)?.let { batch.add(it) }
 
-                    // Emit in batches of 500 to keep UI responsive and memory low
                     if (batch.size >= 500) {
                         emit(ArrayList(batch))
                         batch.clear()
                     }
                 }
             }
-            // Emit remaining items
             if (batch.isNotEmpty()) {
                 emit(batch)
             }
@@ -72,12 +70,11 @@ class XmltvParser(
             }
         }
 
-        // Basic validation: must have title and valid time
         if (title.isEmpty() || start == 0L || end == 0L) return null
 
         return Programme(
             channelId = channelId,
-            playlistUrl = "", // Set by Repository later
+            playlistUrl = "",
             title = title,
             description = desc,
             start = start,
@@ -106,9 +103,9 @@ class XmltvParser(
     }
 
     private fun parseDate(dateStr: String?): Long? {
+        // FIX: Explicit null check before passing to parse
         if (dateStr == null) return null
         return try {
-            // Handle standard XMLTV format "20230720183000 +0000"
             dateFormat.parse(dateStr)?.time
         } catch (e: Exception) {
             null

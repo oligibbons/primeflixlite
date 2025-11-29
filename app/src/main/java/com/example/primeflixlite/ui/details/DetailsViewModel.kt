@@ -26,16 +26,16 @@ class DetailsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(DetailsUiState())
     val uiState = _uiState.asStateFlow()
 
-    // We track the channel object here to update its favorite status
     private val _currentChannel = MutableStateFlow<Channel?>(null)
     val currentChannel = _currentChannel.asStateFlow()
 
-    var selectedSeason = 1 // Simplified state (could be Flow if needed)
+    var selectedSeason = 1
 
     fun loadContent(channel: Channel) {
         _currentChannel.value = channel
 
-        if (channel.type == StreamType.SERIES) {
+        // FIX: Compare String vs String (using .name)
+        if (channel.type == StreamType.SERIES.name) {
             loadEpisodes(channel)
         }
     }
@@ -44,7 +44,6 @@ class DetailsViewModel @Inject constructor(
         val current = _currentChannel.value ?: return
         viewModelScope.launch {
             repository.toggleFavorite(current)
-            // Update local object immediately
             _currentChannel.value = current.copy(isFavorite = !current.isFavorite)
         }
     }
@@ -53,13 +52,11 @@ class DetailsViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = DetailsUiState(isLoading = true)
             try {
-                // Parse series ID safely
                 val seriesId = channel.streamId?.toIntOrNull() ?: 0
                 if (seriesId != 0) {
                     val episodes = repository.getSeriesEpisodes(channel.playlistUrl, seriesId)
                     _uiState.value = DetailsUiState(episodes = episodes)
 
-                    // Auto-select first available season
                     episodes.minByOrNull { it.season }?.let {
                         selectedSeason = it.season
                     }
@@ -77,10 +74,12 @@ class DetailsViewModel @Inject constructor(
     }
 
     fun getEpisodesForSeason(season: Int): List<XtreamChannelInfo.Episode> {
-        return uiState.value.episodes.filter { it.season == season }.sortedBy { it.episode_num }
+        return uiState.value.episodes
+            .filter { it.season == season }
+            // FIX: Use camelCase episodeNum
+            .sortedBy { it.episodeNum }
     }
 
-    // Helper to update the season selection from UI
     fun selectSeason(season: Int) {
         selectedSeason = season
     }

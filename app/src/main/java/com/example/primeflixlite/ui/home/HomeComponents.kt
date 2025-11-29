@@ -96,8 +96,6 @@ fun ContinueWatchingCard(
             }
         }
 
-        // Progress Bar (Visual only - assuming 50% for visual flair if actual not passed,
-        // strictly speaking we'd pass the actual % here, but for Lite we keep it simple)
         LinearProgressIndicator(
             progress = 0.5f,
             modifier = Modifier.fillMaxWidth().height(4.dp),
@@ -116,42 +114,4 @@ fun ContinueWatchingCard(
     }
 }
 
-@Composable
-fun MovieCard(
-    channel: Channel,
-    imageLoader: coil.ImageLoader,
-    onClick: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-    val scale = if (isFocused) 1.05f else 1f
-    val borderColor = if (isFocused) NeonBlue else Color.Transparent
-
-    Column(
-        modifier = Modifier
-            .width(140.dp) // Standard Poster Width
-            .scale(scale)
-            .clip(RoundedCornerShape(8.dp))
-            .border(BorderStroke(2.dp, borderColor), RoundedCornerShape(8.dp))
-            .background(Color(0xFF1E1E1E))
-            .clickable { onClick() }
-            .onFocusChanged { isFocused = it.isFocused }
-            .focusable()
-    ) {
-        // Poster Aspect Ratio 2:3
-        Box(modifier = Modifier.aspectRatio(2f/3f).background(Color.Black)) {
-            if (!channel.cover.isNullOrEmpty()) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current).data(channel.cover).crossfade(true).size(300, 450).build(),
-                    imageLoader = imageLoader,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(text = channel.title.take(1), color = Color.DarkGray, style = MaterialTheme.typography.displaySmall)
-                }
-            }
-        }
-    }
-}
+// Removed Duplicate MovieCard

@@ -1,7 +1,6 @@
 package com.example.primeflixlite.ui.details
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,7 +27,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.primeflixlite.data.local.entity.Channel
@@ -44,12 +42,11 @@ fun DetailsScreen(
     channel: Channel,
     viewModel: DetailsViewModel,
     imageLoader: coil.ImageLoader,
-    onPlayClick: (String) -> Unit, // URL to play
+    onPlayClick: (String) -> Unit,
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // Initial Load
     LaunchedEffect(channel) {
         viewModel.loadContent(channel)
     }
@@ -69,7 +66,6 @@ fun DetailsScreen(
                     .height(400.dp)
                     .drawWithContent {
                         drawContent()
-                        // Gradient Fade to Black
                         drawRect(
                             brush = Brush.verticalGradient(
                                 colors = listOf(Color.Transparent, VoidBlack),
@@ -83,7 +79,7 @@ fun DetailsScreen(
 
         // --- CONTENT ---
         Row(modifier = Modifier.fillMaxSize().padding(40.dp)) {
-            // LEFT: Poster & Info
+            // LEFT: Poster
             Column(modifier = Modifier.width(300.dp)) {
                 Card(
                     shape = RoundedCornerShape(12.dp),
@@ -117,8 +113,8 @@ fun DetailsScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Play Button (If Movie) or Episodes List (If Series)
-                if (channel.type == StreamType.MOVIE) {
+                // FIX: Compare String name to Enum name
+                if (channel.type == StreamType.MOVIE.name) {
                     PlayButton(
                         onClick = { onPlayClick(channel.url) },
                         label = "PLAY MOVIE"
@@ -126,7 +122,8 @@ fun DetailsScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(text = "Group: ${channel.group}", color = Color.Gray)
                 }
-                else if (channel.type == StreamType.SERIES) {
+                // FIX: Compare String name to Enum name
+                else if (channel.type == StreamType.SERIES.name) {
                     if (uiState.isLoading) {
                         CircularProgressIndicator(color = NeonBlue)
                     } else if (uiState.episodes.isNotEmpty()) {
@@ -156,11 +153,9 @@ fun DetailsScreen(
                             items(viewModel.getEpisodesForSeason(viewModel.selectedSeason)) { episode ->
                                 EpisodeRow(
                                     episode = episode,
-                                    // Use container_extension to build URL if not provided directly
                                     onClick = {
-                                        // Construct Stream URL: basicUrl/series/user/pass/id.ext
-                                        // Note: Logic usually handled in repo, simplified here
-                                        val ext = episode.container_extension ?: "mkv"
+                                        // FIX: Use camelCase containerExtension from data class
+                                        val ext = episode.containerExtension ?: "mkv"
                                         val url = "${channel.url.substringBefore("/series/")}/series/${channel.url.split("/")[4]}/${channel.url.split("/")[5]}/${episode.id}.$ext"
                                         onPlayClick(url)
                                     }
@@ -219,11 +214,13 @@ fun EpisodeRow(episode: XtreamChannelInfo.Episode, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "${episode.episode_num}",
+            // FIX: Use camelCase episodeNum
+            text = "${episode.episodeNum}",
             color = NeonBlue,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.width(40.dp)
         )
-        Text(text = episode.title ?: "Episode ${episode.episode_num}", color = White)
+        // FIX: Use camelCase episodeNum
+        Text(text = episode.title ?: "Episode ${episode.episodeNum}", color = White)
     }
 }

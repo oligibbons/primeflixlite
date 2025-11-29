@@ -3,10 +3,6 @@ package com.example.primeflixlite.data.parser.xtream
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/**
- * Data models matching the JSON response from Xtream Codes API actions.
- * Used by XtreamParserImpl.
- */
 class XtreamChannelInfo {
 
     @Serializable
@@ -37,12 +33,19 @@ class XtreamChannelInfo {
         @SerialName("rating") val rating: String? = null
     )
 
+    // FIX: Add this container to handle the "episodes" map in the JSON response
+    @Serializable
+    data class SeriesInfoContainer(
+        @SerialName("episodes") val episodes: Map<String, List<Episode>> = emptyMap()
+    )
+
     @Serializable
     data class Episode(
         @SerialName("id") val id: String,
         @SerialName("title") val title: String?,
-        @SerialName("container_extension") val containerExtension: String = "mp4",
+        @SerialName("container_extension") val containerExtension: String? = "mp4",
         @SerialName("season") val season: Int = 0,
+        // FIX: Match the JSON field name explicitly
         @SerialName("episode_num") val episodeNum: Int = 0
     )
 }

@@ -16,7 +16,7 @@ class M3UParserImpl : M3UParser {
     override fun parse(inputStream: InputStream): Flow<M3UData> = flow {
         val reader = BufferedReader(InputStreamReader(inputStream))
         var line: String?
-        var currentData = M3UData(url = "") // Temporary holder
+        var currentData = M3UData(url = "")
 
         while (reader.readLine().also { line = it } != null) {
             val cleanLine = line?.trim() ?: continue
@@ -27,7 +27,7 @@ class M3UParserImpl : M3UParser {
                 currentData = info
             } else if (cleanLine.isNotEmpty() && !cleanLine.startsWith("#")) {
                 // It's a URL
-                if (currentData.name != null) { // Only emit if we parsed an EXTINF before
+                if (currentData.name != null) {
                     emit(currentData.copy(url = cleanLine))
                 }
                 // Reset for next entry
@@ -38,7 +38,6 @@ class M3UParserImpl : M3UParser {
 
     private fun parseExtInf(line: String): M3UData {
         try {
-            // Basic parsing logic (regex is safer but manual is faster for huge files)
             val parts = line.split(",", limit = 2)
             val attributes = parts.getOrElse(0) { "" }
             val name = parts.getOrElse(1) { "Unknown Channel" }
@@ -52,7 +51,7 @@ class M3UParserImpl : M3UParser {
                 logo = logo,
                 tvgId = id,
                 group = group,
-                url = "" // URL comes on next line
+                url = ""
             )
         } catch (e: Exception) {
             Log.e("M3UParser", "Error parsing line: $line", e)
@@ -81,7 +80,8 @@ fun M3UData.toChannel(playlistUrl: String): Channel {
         group = group ?: "Uncategorized",
         url = url,
         cover = logo,
-        type = if (isVod) StreamType.MOVIE else StreamType.LIVE,
+        // FIX: Convert Enum to String
+        type = if (isVod) StreamType.MOVIE.name else StreamType.LIVE.name,
         relationId = tvgId
     )
 }

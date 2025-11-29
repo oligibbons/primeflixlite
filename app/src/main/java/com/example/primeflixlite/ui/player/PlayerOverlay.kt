@@ -12,7 +12,7 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.* // Imports ArrowBack, PlayArrow, Pause, SkipNext, SkipPrevious, AspectRatio
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -42,12 +42,11 @@ fun PlayerOverlay(
     onNext: () -> Unit,
     onPrev: () -> Unit,
     onResize: () -> Unit,
-    onFavorite: () -> Unit, // NEW callback
+    onFavorite: () -> Unit,
     onBack: () -> Unit
 ) {
     var areControlsVisible by remember { mutableStateOf(false) }
 
-    // Auto-hide controls
     LaunchedEffect(areControlsVisible, isPlaying) {
         if (areControlsVisible && isPlaying) {
             kotlinx.coroutines.delay(4000)
@@ -64,7 +63,6 @@ fun PlayerOverlay(
             ) { areControlsVisible = !areControlsVisible }
     ) {
 
-        // Massive Pause Icon
         val iconAlpha by animateFloatAsState(targetValue = if (!isPlaying) 1f else 0f)
         if (iconAlpha > 0f) {
             Box(
@@ -74,8 +72,9 @@ fun PlayerOverlay(
                     .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center
             ) {
+                // Ensure Pause is imported from Icons.Filled
                 Icon(
-                    imageVector = Icons.Default.Pause,
+                    imageVector = Icons.Filled.Pause,
                     contentDescription = null,
                     tint = NeonBlue.copy(alpha = iconAlpha),
                     modifier = Modifier.size(80.dp)
@@ -83,7 +82,6 @@ fun PlayerOverlay(
             }
         }
 
-        // Controls
         AnimatedVisibility(
             visible = areControlsVisible,
             enter = fadeIn(),
@@ -99,11 +97,10 @@ fun PlayerOverlay(
             ) {
                 // TOP BAR
                 Row(modifier = Modifier.fillMaxWidth().padding(32.dp), verticalAlignment = Alignment.CenterVertically) {
-                    PlayerButton(icon = Icons.Default.ArrowBack, onClick = onBack)
+                    PlayerButton(icon = Icons.Filled.ArrowBack, onClick = onBack)
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
                         Text(text = channel.title, style = MaterialTheme.typography.headlineSmall, color = White, fontWeight = FontWeight.Bold)
-                        // Display EPG if available
                         if (program != null) {
                             Text(
                                 text = "${TimeUtils.formatTime(program.start)} - ${TimeUtils.formatTime(program.end)}: ${program.title}",
@@ -115,13 +112,12 @@ fun PlayerOverlay(
                         }
                     }
                     Spacer(Modifier.weight(1f))
-                    // Resize Button
-                    PlayerButton(icon = Icons.Default.AspectRatio, onClick = onResize)
+                    // AspectRatio is standard
+                    PlayerButton(icon = Icons.Filled.AspectRatio, onClick = onResize)
                 }
 
                 // BOTTOM BAR
                 Column(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(32.dp)) {
-                    // Seek Bar
                     Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                         Text(text = TimeUtils.formatDuration(currentPosition), color = NeonBlue)
                         Text(text = TimeUtils.formatDuration(duration), color = Color.Gray)
@@ -136,29 +132,25 @@ fun PlayerOverlay(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Media Controls Row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween, // Spread items out
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Left: Favorite Button
                         PlayerButton(
-                            icon = if (channel.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
+                            icon = if (channel.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                             onClick = onFavorite,
                             iconColorOverride = if (channel.isFavorite) Color.Red else White
                         )
 
-                        // Center: Playback Controls
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            PlayerButton(icon = Icons.Default.SkipPrevious, onClick = onPrev)
+                            PlayerButton(icon = Icons.Filled.SkipPrevious, onClick = onPrev)
                             Spacer(Modifier.width(24.dp))
-                            PlayerButton(icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, onClick = onPlayPause, isPrimary = true)
+                            PlayerButton(icon = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, onClick = onPlayPause, isPrimary = true)
                             Spacer(Modifier.width(24.dp))
-                            PlayerButton(icon = Icons.Default.SkipNext, onClick = onNext)
+                            PlayerButton(icon = Icons.Filled.SkipNext, onClick = onNext)
                         }
 
-                        // Right: Spacer to balance layout (empty box of same size as favorite button)
                         Box(modifier = Modifier.size(48.dp))
                     }
                 }
@@ -180,11 +172,7 @@ fun PlayerButton(
     val size = if (isPrimary) 64.dp else 48.dp
     val iconSize = if (isPrimary) 32.dp else 24.dp
     val bgColor = if (isFocused) NeonBlue else if (isPrimary) White else Color.Transparent
-
-    // Determine icon color: Focused -> White, Primary -> Black, Override -> Custom, Default -> White
-    val iconColor = if (isFocused) White
-    else if (isPrimary) VoidBlack
-    else iconColorOverride ?: White
+    val iconColor = if (isFocused) White else if (isPrimary) VoidBlack else iconColorOverride ?: White
 
     Box(
         modifier = Modifier

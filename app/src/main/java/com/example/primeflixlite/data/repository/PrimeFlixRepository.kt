@@ -40,21 +40,19 @@ class PrimeFlixRepository @Inject constructor(
     val playlists = playlistDao.getAllPlaylists()
 
     suspend fun addPlaylist(title: String, url: String, source: DataSource) {
-        // FIX: Store source as String (.value)
         val playlist = Playlist(title = title, url = url, source = source.value)
-        playlistDao.insertPlaylist(playlist)
+        playlistDao.insert(playlist) // FIX: Correct DAO method name
         syncPlaylist(playlist)
     }
 
     suspend fun deletePlaylist(playlist: Playlist) = withContext(Dispatchers.IO) {
-        playlistDao.deletePlaylist(playlist.url)
+        playlistDao.delete(playlist) // FIX: Correct DAO method name and logic
         channelDao.deleteByPlaylist(playlist.url)
         programmeDao.deleteByPlaylist(playlist.url)
     }
 
     suspend fun syncPlaylist(playlist: Playlist) = withContext(Dispatchers.IO) {
         try {
-            // FIX: Convert String source back to Enum for logic branching
             val dataSource = DataSource.of(playlist.source)
 
             val channels = when (dataSource) {
@@ -67,7 +65,7 @@ class PrimeFlixRepository @Inject constructor(
                 channelDao.replacePlaylistChannels(playlist.url, channels)
                 Log.d("PrimeFlixRepo", "Synced ${channels.size} items for ${playlist.title}")
 
-                // FIX: Check against String name
+                // FIX: Compare against String name
                 if (channels.any { it.type == StreamType.LIVE.name }) {
                     syncEpg(playlist, dataSource)
                 }
@@ -132,7 +130,7 @@ class PrimeFlixRepository @Inject constructor(
                     group = it.categoryId ?: "Uncategorized",
                     url = "${input.basicUrl}/live/${input.username}/${input.password}/${it.streamId}.ts",
                     cover = it.streamIcon,
-                    type = StreamType.LIVE.name, // FIX: Store as String
+                    type = StreamType.LIVE.name, // FIX: Use .name
                     relationId = it.epgChannelId,
                     streamId = it.streamId.toString()
                 )
@@ -148,7 +146,7 @@ class PrimeFlixRepository @Inject constructor(
                     group = "Movies",
                     url = "${input.basicUrl}/movie/${input.username}/${input.password}/${it.streamId}.${it.containerExtension}",
                     cover = it.streamIcon,
-                    type = StreamType.MOVIE.name, // FIX: Store as String
+                    type = StreamType.MOVIE.name, // FIX: Use .name
                     streamId = it.streamId.toString()
                 )
             })
@@ -163,7 +161,7 @@ class PrimeFlixRepository @Inject constructor(
                     group = "Series",
                     url = "",
                     cover = it.cover,
-                    type = StreamType.SERIES.name, // FIX: Store as String
+                    type = StreamType.SERIES.name, // FIX: Use .name
                     streamId = it.seriesId.toString()
                 )
             })

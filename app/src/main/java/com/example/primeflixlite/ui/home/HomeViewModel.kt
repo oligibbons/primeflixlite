@@ -7,14 +7,18 @@ import com.example.primeflixlite.data.local.entity.Playlist
 import com.example.primeflixlite.data.local.entity.StreamType
 import com.example.primeflixlite.data.local.model.ChannelWithProgram
 import com.example.primeflixlite.data.repository.PrimeFlixRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class HomeViewModel(
+@HiltViewModel
+class HomeViewModel @Inject constructor(
     private val repository: PrimeFlixRepository
 ) : ViewModel() {
 
@@ -84,7 +88,8 @@ class HomeViewModel(
         viewModelScope.launch {
             try {
                 // Fetch latest progress from DB
-                val progressList = repository.getContinueWatching(tab)
+                // FIX: Added .first() to get the list from the Flow
+                val progressList = repository.getContinueWatching(tab).first()
                 // Map the URLs back to Channel objects
                 val progressChannels = progressList.mapNotNull { progress ->
                     allChannels.find { it.channel.url == progress.channelUrl }?.channel
@@ -92,6 +97,7 @@ class HomeViewModel(
                 _uiState.value = _uiState.value.copy(continueWatching = progressChannels)
             } catch (e: Exception) {
                 // Fail silently
+                e.printStackTrace()
             }
         }
     }
@@ -100,7 +106,8 @@ class HomeViewModel(
         val tab = _uiState.value.selectedTab
 
         // 1. Filter by Tab (Live, Movie, Series)
-        val tabChannels = allChannels.filter { it.channel.type == tab }
+        // FIX: Compare String type to Enum Name
+        val tabChannels = allChannels.filter { it.channel.type == tab.name }
 
         // 2. Extract Categories
         val categories = listOf("All") + tabChannels
@@ -126,7 +133,8 @@ class HomeViewModel(
         val category = _uiState.value.selectedCategory
 
         val filtered = allChannels.filter { item ->
-            item.channel.type == tab &&
+            // FIX: Compare String type to Enum Name
+            item.channel.type == tab.name &&
                     (category == "All" || item.channel.group == category)
         }
 

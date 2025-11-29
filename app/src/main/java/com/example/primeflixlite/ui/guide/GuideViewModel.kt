@@ -9,18 +9,18 @@ import com.example.primeflixlite.data.repository.PrimeFlixRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class GuideChannelItem(
+data class GuideItem(
     val channel: Channel,
-    val programmes: List<Programme> = emptyList()
+    val programs: List<Programme> = emptyList()
 )
 
 data class GuideUiState(
-    val channels: List<GuideChannelItem> = emptyList(),
-    val isLoading: Boolean = false,
-    val selectedCategory: String = "All"
+    val isLoading: Boolean = true,
+    val channels: List<GuideItem> = emptyList()
 )
 
 @HiltViewModel
@@ -31,61 +31,37 @@ class GuideViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(GuideUiState())
     val uiState = _uiState.asStateFlow()
 
-    // Cache of all live channels to allow filtering
-    private var allLiveChannels: List<Channel> = emptyList()
-
     init {
-        loadChannels()
+        loadGuide()
     }
 
-    private fun loadChannels() {
+    private fun loadGuide() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
-            // We only want LIVE channels for the guide
-            repository.playlists.collect { playlists ->
-                if (playlists.isNotEmpty()) {
-                    // Just grabbing from the first playlist for now for simplicity
-                    // In a real multi-playlist app, you'd merge or select.
-                    repository.getChannels(playlists.first().url).collect { channels ->
-                        allLiveChannels = channels.filter { it.type == StreamType.LIVE }
-                        filterChannels()
+            repository.playlists.collectLatest { playlists ->
+                // Just grab first active playlist for Lite version demo
+                val activePlaylist = playlists.firstOrNull()
+                if (activePlaylist != null) {
+                    repository.getChannelsWithEpg(activePlaylist.url).collect { channelsWithEpg ->
+                        val items = channelsWithEpg
+                            // FIX: Compare String vs String (.name)
+                            .filter { it.channel.type == StreamType.LIVE.name }
+                            .map {
+                                GuideItem(
+                                    channel = it.channel,
+                                    programs = it.currentProgram?.let { p -> listOf(p) } ?: emptyList()
+                                    // Note: In a full app we'd fetch range of programs, here just current
+                                )
+                            }
+
+                        _uiState.value = GuideUiState(
+                            isLoading = false,
+                            channels = items
+                        )
                     }
+                } else {
+                    _uiState.value = GuideUiState(isLoading = false)
                 }
             }
-        }
-    }
-
-    fun selectCategory(category: String) {
-        _uiState.value = _uiState.value.copy(selectedCategory = category)
-        filterChannels()
-    }
-
-    private fun filterChannels() {
-        viewModelScope.launch {
-            val category = _uiState.value.selectedCategory
-            val filtered = if (category == "All") {
-                allLiveChannels
-            } else {
-                allLiveChannels.filter { it.group == category }
-            }
-
-            // Build the initial list without programs to show UI fast
-            var guideItems = filtered.map { GuideChannelItem(it) }
-            _uiState.value = _uiState.value.copy(channels = guideItems, isLoading = false)
-
-            // Now asynchronously fetch EPG for these channels (Next 4 hours only)
-            val now = System.currentTimeMillis()
-            val end = now + (4 * 60 * 60 * 1000) // 4 hours ahead
-
-            // We fetch in parallel-ish chunks to avoid freezing UI
-            val updatedItems = guideItems.map { item ->
-                val epgId = item.channel.relationId ?: item.channel.title
-                // Add the missing method to Repository next!
-                val programs = repository.getProgrammesForChannel(epgId, now, end)
-                item.copy(programmes = programs)
-            }
-
-            _uiState.value = _uiState.value.copy(channels = updatedItems)
         }
     }
 }

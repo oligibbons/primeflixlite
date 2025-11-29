@@ -1,5 +1,7 @@
 package com.example.primeflixlite.data.parser.xtream
 
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -18,6 +20,12 @@ class XtreamParserImpl(
         isLenient = true
     }
 
+    // internal container to handle the "episodes" map structure from Xtream API
+    @Serializable
+    private data class SeriesInfoContainer(
+        @SerialName("episodes") val episodes: Map<String, List<XtreamChannelInfo.Episode>> = emptyMap()
+    )
+
     override suspend fun getLiveStreams(input: XtreamInput): List<XtreamChannelInfo.LiveStream> {
         val url = buildUrl(input, "get_live_streams")
         return fetchAndParse(url)
@@ -33,7 +41,6 @@ class XtreamParserImpl(
         return fetchAndParse(url)
     }
 
-    // FIXED: Real implementation to fetch episodes
     override suspend fun getSeriesEpisodes(input: XtreamInput, seriesId: Int): List<XtreamChannelInfo.Episode> {
         val url = "${input.basicUrl}/player_api.php?username=${input.username}&password=${input.password}&action=get_series_info&series_id=$seriesId"
 
@@ -47,24 +54,21 @@ class XtreamParserImpl(
                 override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
                     val body = response.body?.string()
                     if (!response.isSuccessful || body == null) {
-                        if (continuation.isActive) continuation.resume(emptyList()) // Fail gracefully
+                        if (continuation.isActive) continuation.resume(emptyList())
                         return
                     }
                     try {
-                        // Xtream returns a complex object { "episodes": { "1": [...], "2": [...] }, "info": {...} }
-                        // We need to parse this manually or use a specific data structure.
-                        // For robustness in this "Lite" app, we'll try a flexible parsing approach:
-                        // The 'episodes' field is a Map<String, List<Episode>> where key is Season Number.
+                        // Parse into our local container
+                        val container = json.decodeFromString<SeriesInfoContainer>(body)
 
-                        val container = json.decodeFromString<XtreamChannelInfo.SeriesInfoContainer>(body)
-                        // Flatten the map into a single list
+                        // Flatten the map and sort by season/episode
+                        // Note: We use 'episodeNum' because that is the property name in XtreamChannelInfo.Episode
                         val allEpisodes = container.episodes.flatMap { entry ->
                             entry.value
-                        }.sortedWith(compareBy({ it.season }, { it.episode_num }))
+                        }.sortedWith(compareBy({ it.season }, { it.episodeNum }))
 
                         if (continuation.isActive) continuation.resume(allEpisodes)
                     } catch (e: Exception) {
-                        // Fallback: Log error and return empty to prevent crash
                         e.printStackTrace()
                         if (continuation.isActive) continuation.resume(emptyList())
                     }
@@ -97,7 +101,6 @@ class XtreamParserImpl(
                         val result = json.decodeFromString<T>(body)
                         if (continuation.isActive) continuation.resume(result)
                     } catch (e: Exception) {
-                        // If parsing fails, try to return a simplified empty list if T is a List
                         if (continuation.isActive) continuation.resumeWithException(e)
                     }
                 }

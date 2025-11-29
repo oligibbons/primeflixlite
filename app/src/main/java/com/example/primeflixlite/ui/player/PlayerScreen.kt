@@ -34,17 +34,14 @@ fun PlayerScreen(
 ) {
     val context = LocalContext.current
 
-    // 1. Initialize ViewModel with the starting channel
     LaunchedEffect(initialChannel) {
         viewModel.initialize(initialChannel)
     }
 
-    // 2. Observe ViewModel State
     val currentChannel by viewModel.currentChannel.collectAsState()
     val currentProgram by viewModel.currentProgram.collectAsState()
     val resizeMode by viewModel.resizeMode.collectAsState()
 
-    // 3. Setup ExoPlayer
     val player = remember {
         val loadControl = DefaultLoadControl.Builder()
             .setAllocator(DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE))
@@ -58,7 +55,6 @@ fun PlayerScreen(
             }
     }
 
-    // 4. Handle Channel Changes (Zapping)
     LaunchedEffect(currentChannel) {
         currentChannel?.let { channel ->
             val mediaItem = MediaItem.fromUri(channel.url)
@@ -68,7 +64,6 @@ fun PlayerScreen(
         }
     }
 
-    // 5. Sync Player State to UI
     var isPlaying by remember { mutableStateOf(true) }
     var currentPosition by remember { mutableStateOf(0L) }
     var duration by remember { mutableStateOf(0L) }
@@ -97,7 +92,6 @@ fun PlayerScreen(
     BackHandler { onBack() }
 
     Box(modifier = Modifier.fillMaxSize().background(VoidBlack)) {
-        // Video Surface
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
@@ -110,7 +104,6 @@ fun PlayerScreen(
                 }
             },
             update = { view ->
-                // Update resize mode dynamically
                 view.resizeMode = when(resizeMode) {
                     1 -> AspectRatioFrameLayout.RESIZE_MODE_FILL
                     2 -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
@@ -120,7 +113,6 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Overlay with Zapping & EPG
         if (currentChannel != null) {
             PlayerOverlay(
                 channel = currentChannel!!,
@@ -133,6 +125,8 @@ fun PlayerScreen(
                 onNext = { viewModel.nextChannel() },
                 onPrev = { viewModel.prevChannel() },
                 onResize = { viewModel.toggleResizeMode() },
+                // FIX: Passed the missing callback
+                onFavorite = { viewModel.toggleFavorite() },
                 onBack = onBack
             )
         }
