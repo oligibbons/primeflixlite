@@ -5,13 +5,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.ImageLoader
 import com.example.primeflixlite.data.local.entity.Channel
 import com.example.primeflixlite.data.local.entity.StreamType
+import com.example.primeflixlite.ui.components.NotificationOverlay
 import com.example.primeflixlite.ui.details.DetailsScreen
 import com.example.primeflixlite.ui.details.DetailsViewModel
 import com.example.primeflixlite.ui.guide.GuideScreen
@@ -29,9 +32,9 @@ import com.example.primeflixlite.ui.settings.SettingsViewModel
 import com.example.primeflixlite.ui.splash.SplashScreen
 import com.example.primeflixlite.ui.theme.PrimeFlixLiteTheme
 import com.example.primeflixlite.ui.theme.VoidBlack
+import com.example.primeflixlite.util.FeedbackManager
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import coil.ImageLoader
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -39,6 +42,10 @@ class MainActivity : ComponentActivity() {
     // Inject ImageLoader directly via Hilt
     @Inject
     lateinit var imageLoader: ImageLoader
+
+    // NEW: Inject FeedbackManager to display global notifications
+    @Inject
+    lateinit var feedbackManager: FeedbackManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,130 +55,133 @@ class MainActivity : ComponentActivity() {
             PrimeFlixLiteTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = VoidBlack) {
 
-                    // --- GLOBAL NAVIGATION STATE ---
-                    var showSplash by remember { mutableStateOf(true) }
+                    // USE A BOX TO STACK NOTIFICATIONS ON TOP OF SCREENS
+                    Box(modifier = Modifier.fillMaxSize()) {
 
-                    // Route Flags
-                    var showSearch by remember { mutableStateOf(false) }
-                    var showSettings by remember { mutableStateOf(false) }
-                    var showAddPlaylist by remember { mutableStateOf(false) }
-                    var showGuide by remember { mutableStateOf(false) }
+                        // --- GLOBAL NAVIGATION STATE ---
+                        var showSplash by remember { mutableStateOf(true) }
 
-                    // Content Objects
-                    var playingChannel by remember { mutableStateOf<Channel?>(null) }
-                    var detailsChannel by remember { mutableStateOf<Channel?>(null) }
+                        // Route Flags
+                        var showSearch by remember { mutableStateOf(false) }
+                        var showSettings by remember { mutableStateOf(false) }
+                        var showAddPlaylist by remember { mutableStateOf(false) }
+                        var showGuide by remember { mutableStateOf(false) }
 
-                    // --- 1. SPLASH SCREEN ---
-                    if (showSplash) {
-                        SplashScreen(onSplashFinished = { showSplash = false })
-                    }
-                    // --- 2. PLAYER (Top Priority) ---
-                    else if (playingChannel != null) {
-                        // Use hiltViewModel() instead of manual factory
-                        val playerViewModel: PlayerViewModel = hiltViewModel()
+                        // Content Objects
+                        var playingChannel by remember { mutableStateOf<Channel?>(null) }
+                        var detailsChannel by remember { mutableStateOf<Channel?>(null) }
 
-                        BackHandler { playingChannel = null }
+                        // --- 1. SPLASH SCREEN ---
+                        if (showSplash) {
+                            SplashScreen(onSplashFinished = { showSplash = false })
+                        }
+                        // --- 2. PLAYER (Top Priority) ---
+                        else if (playingChannel != null) {
+                            val playerViewModel: PlayerViewModel = hiltViewModel()
 
-                        PlayerScreen(
-                            initialChannel = playingChannel!!,
-                            viewModel = playerViewModel,
-                            onBack = { playingChannel = null }
-                        )
-                    }
-                    // --- 3. DETAILS SCREEN (Movies/Series) ---
-                    else if (detailsChannel != null) {
-                        val detailsViewModel: DetailsViewModel = hiltViewModel()
+                            BackHandler { playingChannel = null }
 
-                        DetailsScreen(
-                            channel = detailsChannel!!,
-                            viewModel = detailsViewModel,
-                            imageLoader = imageLoader,
-                            onPlayClick = { url ->
-                                val toPlay = detailsChannel!!.copy(url = url)
-                                playingChannel = toPlay
-                            },
-                            onBack = { detailsChannel = null }
-                        )
-                    }
-                    // --- 4. TV GUIDE ---
-                    else if (showGuide) {
-                        val guideViewModel: GuideViewModel = hiltViewModel()
+                            PlayerScreen(
+                                initialChannel = playingChannel!!,
+                                viewModel = playerViewModel,
+                                onBack = { playingChannel = null }
+                            )
+                        }
+                        // --- 3. DETAILS SCREEN (Movies/Series) ---
+                        else if (detailsChannel != null) {
+                            val detailsViewModel: DetailsViewModel = hiltViewModel()
 
-                        BackHandler { showGuide = false }
+                            DetailsScreen(
+                                channel = detailsChannel!!,
+                                viewModel = detailsViewModel,
+                                imageLoader = imageLoader,
+                                onPlayClick = { url ->
+                                    val toPlay = detailsChannel!!.copy(url = url)
+                                    playingChannel = toPlay
+                                },
+                                onBack = { detailsChannel = null }
+                            )
+                        }
+                        // --- 4. TV GUIDE ---
+                        else if (showGuide) {
+                            val guideViewModel: GuideViewModel = hiltViewModel()
 
-                        GuideScreen(
-                            viewModel = guideViewModel,
-                            imageLoader = imageLoader,
-                            onChannelClick = { channel ->
-                                playingChannel = channel
-                            },
-                            onBack = { showGuide = false }
-                        )
-                    }
-                    // --- 5. SEARCH SCREEN ---
-                    else if (showSearch) {
-                        val searchViewModel: SearchViewModel = hiltViewModel()
+                            BackHandler { showGuide = false }
 
-                        BackHandler { showSearch = false }
-
-                        SearchScreen(
-                            viewModel = searchViewModel,
-                            imageLoader = imageLoader,
-                            onChannelClick = { channel ->
-                                // FIX: Compare String type to Enum Name
-                                if (channel.type == StreamType.LIVE.name) {
+                            GuideScreen(
+                                viewModel = guideViewModel,
+                                imageLoader = imageLoader,
+                                onChannelClick = { channel ->
                                     playingChannel = channel
-                                } else {
-                                    detailsChannel = channel
-                                }
-                                showSearch = false
-                            },
-                            onBack = { showSearch = false }
-                        )
-                    }
-                    // --- 6. SETTINGS SCREEN ---
-                    else if (showSettings) {
-                        val settingsViewModel: SettingsViewModel = hiltViewModel()
+                                },
+                                onBack = { showGuide = false }
+                            )
+                        }
+                        // --- 5. SEARCH SCREEN ---
+                        else if (showSearch) {
+                            val searchViewModel: SearchViewModel = hiltViewModel()
 
-                        BackHandler { showSettings = false }
+                            BackHandler { showSearch = false }
 
-                        SettingsScreen(
-                            onBack = { showSettings = false },
-                            viewModel = settingsViewModel
-                        )
-                    }
-                    // --- 7. ADD PLAYLIST SCREEN ---
-                    else if (showAddPlaylist) {
-                        val addXtreamViewModel: AddXtreamViewModel = hiltViewModel()
+                            SearchScreen(
+                                viewModel = searchViewModel,
+                                imageLoader = imageLoader,
+                                onChannelClick = { channel ->
+                                    if (channel.type == StreamType.LIVE.name) {
+                                        playingChannel = channel
+                                    } else {
+                                        detailsChannel = channel
+                                    }
+                                    showSearch = false
+                                },
+                                onBack = { showSearch = false }
+                            )
+                        }
+                        // --- 6. SETTINGS SCREEN ---
+                        else if (showSettings) {
+                            val settingsViewModel: SettingsViewModel = hiltViewModel()
 
-                        BackHandler { showAddPlaylist = false }
+                            BackHandler { showSettings = false }
 
-                        AddXtreamScreen(
-                            onPlaylistAdded = { showAddPlaylist = false },
-                            viewModel = addXtreamViewModel
-                        )
-                    }
-                    // --- 8. HOME SCREEN (Default) ---
-                    else {
-                        // Use hiltViewModel()
-                        val homeViewModel: HomeViewModel = hiltViewModel()
+                            SettingsScreen(
+                                onBack = { showSettings = false },
+                                viewModel = settingsViewModel
+                            )
+                        }
+                        // --- 7. ADD PLAYLIST SCREEN ---
+                        else if (showAddPlaylist) {
+                            val addXtreamViewModel: AddXtreamViewModel = hiltViewModel()
 
-                        HomeScreen(
-                            viewModel = homeViewModel,
-                            imageLoader = imageLoader,
-                            onChannelClick = { channel ->
-                                // FIX: Compare String type to Enum Name
-                                if (channel.type == StreamType.LIVE.name) {
-                                    playingChannel = channel
-                                } else {
-                                    detailsChannel = channel
-                                }
-                            },
-                            onSearchClick = { showSearch = true },
-                            onAddAccountClick = { showAddPlaylist = true },
-                            onGuideClick = { showGuide = true },
-                            onSettingsClick = { showSettings = true }
-                        )
+                            BackHandler { showAddPlaylist = false }
+
+                            AddXtreamScreen(
+                                onPlaylistAdded = { showAddPlaylist = false },
+                                viewModel = addXtreamViewModel
+                            )
+                        }
+                        // --- 8. HOME SCREEN (Default) ---
+                        else {
+                            val homeViewModel: HomeViewModel = hiltViewModel()
+
+                            HomeScreen(
+                                viewModel = homeViewModel,
+                                imageLoader = imageLoader,
+                                onChannelClick = { channel ->
+                                    if (channel.type == StreamType.LIVE.name) {
+                                        playingChannel = channel
+                                    } else {
+                                        detailsChannel = channel
+                                    }
+                                },
+                                onSearchClick = { showSearch = true },
+                                onAddAccountClick = { showAddPlaylist = true },
+                                onGuideClick = { showGuide = true },
+                                onSettingsClick = { showSettings = true }
+                            )
+                        }
+
+                        // --- 9. NOTIFICATION OVERLAY (Always on Top) ---
+                        NotificationOverlay(feedbackManager)
                     }
                 }
             }

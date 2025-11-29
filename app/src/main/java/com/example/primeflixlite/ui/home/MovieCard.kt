@@ -8,7 +8,6 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -43,16 +42,24 @@ fun MovieCard(
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
-    // Visual Feedback (Scale + Border)
+    // Visual Feedback (Scale)
     val scale = if (isFocused) 1.08f else 1f
-    val border = if (isFocused) NeonBlue else Color.Transparent
+
+    // OPTIMIZATION: Memoize the gradient to prevent object creation during scroll
+    val gradient = remember {
+        Brush.verticalGradient(
+            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f)),
+            startY = 100f
+        )
+    }
 
     Box(
         modifier = Modifier
             .scale(scale)
-            .aspectRatio(2f / 3f) // Standard Movie Poster Ratio
+            .aspectRatio(2f / 3f)
             .clip(RoundedCornerShape(8.dp))
-            .border(BorderStroke(2.dp, border), RoundedCornerShape(8.dp))
+            // OPTIMIZATION: Only apply border logic if focused (avoids drawing transparent borders)
+            .then(if (isFocused) Modifier.border(BorderStroke(2.dp, NeonBlue), RoundedCornerShape(8.dp)) else Modifier)
             .background(Color(0xFF1E1E1E))
             .clickable { onClick() }
             .onFocusChanged { isFocused = it.isFocused }
@@ -62,8 +69,8 @@ fun MovieCard(
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(channel.cover)
-                    .crossfade(true)
-                    .size(300, 450) // Resize to save RAM
+                    // OPTIMIZATION: Removed crossfade here (handled globally or disabled for performance)
+                    .size(300, 450)
                     .build(),
                 imageLoader = imageLoader,
                 contentDescription = null,
@@ -71,7 +78,6 @@ fun MovieCard(
                 modifier = Modifier.fillMaxSize()
             )
         } else {
-            // Fallback for missing covers
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -84,17 +90,12 @@ fun MovieCard(
             }
         }
 
-        // Title Overlay (Only visible if focused or if no cover)
+        // Title Overlay
         if (isFocused || channel.cover.isNullOrEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f)),
-                            startY = 100f
-                        )
-                    )
+                    .background(gradient) // Use cached gradient
             ) {
                 Text(
                     text = channel.title,

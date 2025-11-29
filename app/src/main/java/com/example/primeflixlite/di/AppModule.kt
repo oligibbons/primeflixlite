@@ -16,6 +16,7 @@ import com.example.primeflixlite.data.parser.xmltv.XmltvParser
 import com.example.primeflixlite.data.parser.xtream.XtreamParser
 import com.example.primeflixlite.data.parser.xtream.XtreamParserImpl
 import com.example.primeflixlite.data.repository.PrimeFlixRepository
+import com.example.primeflixlite.util.FeedbackManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -31,13 +32,17 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideFeedbackManager(): FeedbackManager = FeedbackManager()
+
+    @Provides
+    @Singleton
     fun provideDatabase(@ApplicationContext context: Context): PrimeFlixDatabase {
         return Room.databaseBuilder(
             context,
             PrimeFlixDatabase::class.java,
             "primeflix_db"
         )
-            .fallbackToDestructiveMigration() // Safety for dev
+            .fallbackToDestructiveMigration()
             .build()
     }
 
@@ -60,13 +65,13 @@ object AppModule {
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
-            .build() // Add logging interceptor here if debugging needed
+            .build()
     }
 
     @Provides
     @Singleton
-    fun provideXtreamParser(client: OkHttpClient): XtreamParser {
-        return XtreamParserImpl(client)
+    fun provideXtreamParser(client: OkHttpClient, feedbackManager: FeedbackManager): XtreamParser {
+        return XtreamParserImpl(client, feedbackManager)
     }
 
     @Provides
@@ -77,11 +82,9 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideXmltvParser(client: OkHttpClient): XmltvParser {
-        // Assuming XmltvParser implementation handles the client or fetching internally
-        // If your XmltvParser is just a class, instantiate it here.
-        // Based on previous context, likely:
-        return XmltvParser(client)
+    fun provideXmltvParser(client: OkHttpClient, feedbackManager: FeedbackManager): XmltvParser {
+        // Updated to inject FeedbackManager
+        return XmltvParser(client, feedbackManager)
     }
 
     @Provides
@@ -94,7 +97,8 @@ object AppModule {
         xtreamParser: XtreamParser,
         m3uParser: M3UParser,
         xmltvParser: XmltvParser,
-        okHttpClient: OkHttpClient
+        okHttpClient: OkHttpClient,
+        feedbackManager: FeedbackManager
     ): PrimeFlixRepository {
         return PrimeFlixRepository(
             playlistDao,
@@ -104,7 +108,8 @@ object AppModule {
             xtreamParser,
             m3uParser,
             xmltvParser,
-            okHttpClient
+            okHttpClient,
+            feedbackManager
         )
     }
 
@@ -115,7 +120,7 @@ object AppModule {
             .okHttpClient(client)
             .memoryCache {
                 MemoryCache.Builder(context)
-                    .maxSizePercent(0.25)
+                    .maxSizePercent(0.12)
                     .build()
             }
             .diskCache {
@@ -124,7 +129,7 @@ object AppModule {
                     .maxSizePercent(0.02)
                     .build()
             }
-            .crossfade(true)
+            .crossfade(false)
             .build()
     }
 }

@@ -16,6 +16,7 @@ import com.example.primeflixlite.data.parser.m3u.toChannel
 import com.example.primeflixlite.data.parser.xmltv.XmltvParser
 import com.example.primeflixlite.data.parser.xtream.XtreamInput
 import com.example.primeflixlite.data.parser.xtream.XtreamParser
+import com.example.primeflixlite.util.FeedbackManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -33,7 +34,8 @@ class PrimeFlixRepository @Inject constructor(
     private val xtreamParser: XtreamParser,
     private val m3uParser: M3UParser,
     private val xmltvParser: XmltvParser,
-    private val okHttpClient: OkHttpClient
+    private val okHttpClient: OkHttpClient,
+    private val feedbackManager: FeedbackManager
 ) {
 
     // --- PLAYLISTS & CHANNELS ---
@@ -62,15 +64,34 @@ class PrimeFlixRepository @Inject constructor(
             }
 
             if (channels.isNotEmpty()) {
-                channelDao.replacePlaylistChannels(playlist.url, channels)
+                feedbackManager.showLoading("Saving Data...", "Database")
+
+                channelDao.deleteByPlaylist(playlist.url)
+
+                // Chunked Insert with Progress Update
+                val batchSize = 500
+                val chunks = channels.chunked(batchSize)
+                val totalChunks = chunks.size
+
+                chunks.forEachIndexed { index, batch ->
+                    channelDao.insertAll(batch)
+                    val progress = (index + 1).toFloat() / totalChunks
+                    feedbackManager.updateProgress(progress)
+                }
+
                 Log.d("PrimeFlixRepo", "Synced ${channels.size} items for ${playlist.title}")
 
                 if (channels.any { it.type == StreamType.LIVE.name }) {
                     syncEpg(playlist, dataSource)
                 }
+
+                feedbackManager.showSuccess("Playlist Synced Successfully!")
+            } else {
+                feedbackManager.showError("No channels found in playlist.")
             }
         } catch (e: Exception) {
             Log.e("PrimeFlixRepo", "Error syncing playlist", e)
+            feedbackManager.showError("Sync Failed: ${e.message}")
         }
     }
 
@@ -90,7 +111,6 @@ class PrimeFlixRepository @Inject constructor(
     }
 
     // --- WATCH HISTORY ---
-    // Ensure input is StreamType to match ViewModel call
     fun getContinueWatching(type: StreamType) = watchProgressDao.getContinueWatching(type.name)
 
     fun getRecentChannels() = watchProgressDao.getRecentChannels()
@@ -171,6 +191,7 @@ class PrimeFlixRepository @Inject constructor(
     }
 
     private suspend fun fetchM3UData(playlist: Playlist): List<Channel> {
+        feedbackManager.showLoading("Downloading Playlist...", "M3U File")
         val request = Request.Builder().url(playlist.url).build()
         val response = okHttpClient.newCall(request).execute()
         val inputStream = response.body?.byteStream() ?: return emptyList()
@@ -196,6 +217,7 @@ class PrimeFlixRepository @Inject constructor(
             }
 
             if (epgUrl != null) {
+                feedbackManager.showLoading("Updating Guide...", "EPG")
                 programmeDao.deleteOldProgrammes(System.currentTimeMillis())
                 xmltvParser.parse(epgUrl).collect { batch ->
                     val validBatch = batch.map { it.copy(playlistUrl = playlist.url) }
