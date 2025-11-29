@@ -63,7 +63,6 @@ class XmltvParser(
         while (parser.next() != XmlPullParser.END_TAG || parser.name != "programme") {
             if (parser.eventType == XmlPullParser.START_TAG) {
                 when (parser.name) {
-                    // FIX: Renamed function calls to match the new method name
                     "title" -> title = extractText(parser)
                     "desc" -> desc = extractText(parser)
                     else -> skip(parser)
@@ -77,17 +76,16 @@ class XmltvParser(
             channelId = channelId,
             playlistUrl = "",
             title = title,
-            description = desc,
+            // FIX: Ensure description is never null to match Entity definition
+            description = desc ?: "",
             start = start,
             end = end
         )
     }
 
-    // FIX: Renamed from readText to extractText to force cache invalidation
     private fun extractText(parser: XmlPullParser): String {
         var result = ""
         if (parser.next() == XmlPullParser.TEXT) {
-            // Explicitly capture nullable text into a variable first
             val rawText: String? = parser.text
             result = rawText ?: ""
             parser.nextTag()
