@@ -9,15 +9,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.primeflixlite.data.local.entity.Channel
 import com.example.primeflixlite.data.local.entity.StreamType
-import com.example.primeflixlite.ui.ViewModelFactory
 import com.example.primeflixlite.ui.details.DetailsScreen
 import com.example.primeflixlite.ui.details.DetailsViewModel
 import com.example.primeflixlite.ui.guide.GuideScreen
 import com.example.primeflixlite.ui.guide.GuideViewModel
 import com.example.primeflixlite.ui.home.HomeScreen
+import com.example.primeflixlite.ui.home.HomeViewModel
 import com.example.primeflixlite.ui.player.PlayerScreen
 import com.example.primeflixlite.ui.player.PlayerViewModel
 import com.example.primeflixlite.ui.search.SearchScreen
@@ -29,13 +29,20 @@ import com.example.primeflixlite.ui.settings.SettingsViewModel
 import com.example.primeflixlite.ui.splash.SplashScreen
 import com.example.primeflixlite.ui.theme.PrimeFlixLiteTheme
 import com.example.primeflixlite.ui.theme.VoidBlack
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
+import coil.ImageLoader
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    // Inject ImageLoader directly via Hilt
+    @Inject
+    lateinit var imageLoader: ImageLoader
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
-        val appModule = (application as PrimeFlixApplication).appModule
 
         setContent {
             PrimeFlixLiteTheme {
@@ -48,7 +55,7 @@ class MainActivity : ComponentActivity() {
                     var showSearch by remember { mutableStateOf(false) }
                     var showSettings by remember { mutableStateOf(false) }
                     var showAddPlaylist by remember { mutableStateOf(false) }
-                    var showGuide by remember { mutableStateOf(false) } // NEW: Guide Flag
+                    var showGuide by remember { mutableStateOf(false) }
 
                     // Content Objects
                     var playingChannel by remember { mutableStateOf<Channel?>(null) }
@@ -60,9 +67,8 @@ class MainActivity : ComponentActivity() {
                     }
                     // --- 2. PLAYER (Top Priority) ---
                     else if (playingChannel != null) {
-                        val playerViewModel: PlayerViewModel = viewModel(
-                            factory = ViewModelFactory(appModule.repository)
-                        )
+                        // Use hiltViewModel() instead of manual factory
+                        val playerViewModel: PlayerViewModel = hiltViewModel()
 
                         BackHandler { playingChannel = null }
 
@@ -74,14 +80,12 @@ class MainActivity : ComponentActivity() {
                     }
                     // --- 3. DETAILS SCREEN (Movies/Series) ---
                     else if (detailsChannel != null) {
-                        val detailsViewModel: DetailsViewModel = viewModel(
-                            factory = ViewModelFactory(appModule.repository)
-                        )
+                        val detailsViewModel: DetailsViewModel = hiltViewModel()
 
                         DetailsScreen(
                             channel = detailsChannel!!,
                             viewModel = detailsViewModel,
-                            imageLoader = appModule.imageLoader,
+                            imageLoader = imageLoader,
                             onPlayClick = { url ->
                                 val toPlay = detailsChannel!!.copy(url = url)
                                 playingChannel = toPlay
@@ -89,19 +93,16 @@ class MainActivity : ComponentActivity() {
                             onBack = { detailsChannel = null }
                         )
                     }
-                    // --- 4. TV GUIDE (NEW) ---
+                    // --- 4. TV GUIDE ---
                     else if (showGuide) {
-                        val guideViewModel: GuideViewModel = viewModel(
-                            factory = ViewModelFactory(appModule.repository)
-                        )
+                        val guideViewModel: GuideViewModel = hiltViewModel()
 
                         BackHandler { showGuide = false }
 
                         GuideScreen(
                             viewModel = guideViewModel,
-                            imageLoader = appModule.imageLoader,
+                            imageLoader = imageLoader,
                             onChannelClick = { channel ->
-                                // Clicking a channel in guide plays it immediately
                                 playingChannel = channel
                             },
                             onBack = { showGuide = false }
@@ -109,17 +110,16 @@ class MainActivity : ComponentActivity() {
                     }
                     // --- 5. SEARCH SCREEN ---
                     else if (showSearch) {
-                        val searchViewModel: SearchViewModel = viewModel(
-                            factory = ViewModelFactory(appModule.repository)
-                        )
+                        val searchViewModel: SearchViewModel = hiltViewModel()
 
                         BackHandler { showSearch = false }
 
                         SearchScreen(
                             viewModel = searchViewModel,
-                            imageLoader = appModule.imageLoader,
+                            imageLoader = imageLoader,
                             onChannelClick = { channel ->
-                                if (channel.type == StreamType.LIVE) {
+                                // FIX: Compare String type to Enum Name
+                                if (channel.type == StreamType.LIVE.name) {
                                     playingChannel = channel
                                 } else {
                                     detailsChannel = channel
@@ -131,9 +131,7 @@ class MainActivity : ComponentActivity() {
                     }
                     // --- 6. SETTINGS SCREEN ---
                     else if (showSettings) {
-                        val settingsViewModel: SettingsViewModel = viewModel(
-                            factory = ViewModelFactory(appModule.repository)
-                        )
+                        val settingsViewModel: SettingsViewModel = hiltViewModel()
 
                         BackHandler { showSettings = false }
 
@@ -144,9 +142,7 @@ class MainActivity : ComponentActivity() {
                     }
                     // --- 7. ADD PLAYLIST SCREEN ---
                     else if (showAddPlaylist) {
-                        val addXtreamViewModel: AddXtreamViewModel = viewModel(
-                            factory = ViewModelFactory(appModule.repository)
-                        )
+                        val addXtreamViewModel: AddXtreamViewModel = hiltViewModel()
 
                         BackHandler { showAddPlaylist = false }
 
@@ -157,11 +153,15 @@ class MainActivity : ComponentActivity() {
                     }
                     // --- 8. HOME SCREEN (Default) ---
                     else {
+                        // Use hiltViewModel()
+                        val homeViewModel: HomeViewModel = hiltViewModel()
+
                         HomeScreen(
-                            viewModel = viewModel(factory = ViewModelFactory(appModule.repository)),
-                            imageLoader = appModule.imageLoader,
+                            viewModel = homeViewModel,
+                            imageLoader = imageLoader,
                             onChannelClick = { channel ->
-                                if (channel.type == StreamType.LIVE) {
+                                // FIX: Compare String type to Enum Name
+                                if (channel.type == StreamType.LIVE.name) {
                                     playingChannel = channel
                                 } else {
                                     detailsChannel = channel
@@ -169,7 +169,7 @@ class MainActivity : ComponentActivity() {
                             },
                             onSearchClick = { showSearch = true },
                             onAddAccountClick = { showAddPlaylist = true },
-                            onGuideClick = { showGuide = true }, // Trigger Guide
+                            onGuideClick = { showGuide = true },
                             onSettingsClick = { showSettings = true }
                         )
                     }

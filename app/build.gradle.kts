@@ -4,6 +4,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
+    // Apply Hilt Plugin
+    alias(libs.plugins.hilt.android)
 }
 
 android {
@@ -16,7 +18,6 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -42,7 +43,6 @@ android {
 }
 
 dependencies {
-    // --- Core Android & Compose ---
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
@@ -53,31 +53,32 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
 
-    // --- PRIMEFLIX ADDITIONS ---
+    // Hilt Dependencies
+    implementation(libs.hilt.android)
+    implementation(libs.androidx.hilt.navigation.compose)
+    ksp(libs.hilt.compiler)
 
-    // 1. Room Database (The Memory)
-    // FIX: Downgrade to 2.6.1 Stable to stop compiler recursion crash
+    // Room
     val room_version = "2.6.1"
     implementation("androidx.room:room-runtime:$room_version")
     implementation("androidx.room:room-ktx:$room_version")
     ksp("androidx.room:room-compiler:$room_version")
 
-    // 2. Retrofit (The Networking)
+    // Retrofit
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 
-    // 3. Coil (Image Loading)
+    // Coil
     implementation("io.coil-kt:coil-compose:2.6.0")
 
-    // 4. Media3 (The Video Player)
+    // Media3
     val media3_version = "1.3.0"
     implementation("androidx.media3:media3-exoplayer:$media3_version")
     implementation("androidx.media3:media3-ui:$media3_version")
     implementation("androidx.media3:media3-common:$media3_version")
 
-    // --- Testing ---
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
