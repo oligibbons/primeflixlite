@@ -85,7 +85,8 @@ class XmltvParser(
     private fun readText(parser: XmlPullParser): String {
         var result = ""
         if (parser.next() == XmlPullParser.TEXT) {
-            result = parser.text
+            // FIX: Explicitly handle nullable text with Elvis operator
+            result = parser.text ?: ""
             parser.nextTag()
         }
         return result
@@ -103,8 +104,6 @@ class XmltvParser(
     }
 
     private fun parseDate(dateStr: String?): Long? {
-        // FIX: Using Kotlin's safe call operator `?.let` avoids the need for `!!` assertions
-        // and safely handles the nullable string.
         return dateStr?.let {
             try {
                 dateFormat.parse(it)?.time
