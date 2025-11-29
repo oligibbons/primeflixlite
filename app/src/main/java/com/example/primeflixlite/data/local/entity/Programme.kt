@@ -1,23 +1,33 @@
 package com.example.primeflixlite.data.local.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
-import androidx.room.ForeignKey
-import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(
-    indices = [Index(value = ["channelId", "start", "end"])],
-    // Optional: Delete programs if the parent Channel is deleted (Cascade)
-    // For Xtream, we often map by 'relationId' (EPG ID), which might not strictly match a Channel PK.
-    // So we'll keep it loose for now to prevent accidental wipes.
-)
+@Entity(tableName = "programmes")
 data class Programme(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val channelId: String, // Maps to Channel.relationId (the EPG ID)
-    val playlistUrl: String, // To group data by provider
+    @PrimaryKey(autoGenerate = true)
+    @ColumnInfo(name = "id")
+    val id: Int = 0,
+
+    @ColumnInfo(name = "title")
     val title: String,
-    val description: String?,
-    val start: Long, // Epoch millis
-    val end: Long,   // Epoch millis
-    val icon: String? = null
+
+    @ColumnInfo(name = "description")
+    val description: String,
+
+    @ColumnInfo(name = "start")
+    val start: Long,
+
+    @ColumnInfo(name = "end")
+    val end: Long,
+
+    @ColumnInfo(name = "icon")
+    val icon: String? = null,
+
+    @ColumnInfo(name = "channel_id")
+    val channelId: String,
+
+    @ColumnInfo(name = "playlist_url")
+    val playlistUrl: String
 )

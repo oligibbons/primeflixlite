@@ -2,7 +2,6 @@ package com.example.primeflixlite.data.local.entity
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
-import androidx.room.Ignore
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
@@ -11,7 +10,7 @@ import androidx.room.PrimaryKey
     indices = [
         Index(value = ["playlist_url"]),
         Index(value = ["type"]),
-        Index(value = ["is_favorite"]) // Optimization for Favorites screen
+        Index(value = ["is_favorite"])
     ]
 )
 data class Channel(
@@ -35,7 +34,7 @@ data class Channel(
     val cover: String? = null,
 
     @ColumnInfo(name = "type")
-    val type: String = "LIVE", // Default string value
+    val type: String = "LIVE",
 
     @ColumnInfo(name = "relation_id")
     val relationId: String? = null,
@@ -45,13 +44,4 @@ data class Channel(
 
     @ColumnInfo(name = "is_favorite")
     val isFavorite: Boolean = false
-) {
-    val category: String get() = group
-
-    val streamType: StreamType
-        @Ignore get() = try {
-            StreamType.valueOf(type)
-        } catch (e: Exception) {
-            StreamType.LIVE
-        }
-}
+)
