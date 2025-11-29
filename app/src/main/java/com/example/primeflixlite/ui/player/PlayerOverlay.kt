@@ -16,7 +16,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings // Replaced AspectRatio with Settings (Core Icon)
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -117,7 +117,6 @@ fun PlayerOverlay(
                         }
                     }
                     Spacer(Modifier.weight(1f))
-                    // FIX: Using Settings icon instead of AspectRatio to guarantee compilation without extended library
                     PlayerButton(icon = Icons.Default.Settings, onClick = onResize)
                 }
 

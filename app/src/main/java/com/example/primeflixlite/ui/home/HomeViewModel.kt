@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.primeflixlite.data.local.entity.Channel
 import com.example.primeflixlite.data.local.entity.Playlist
 import com.example.primeflixlite.data.local.entity.StreamType
-import com.example.primeflixlite.data.local.entity.WatchProgress // FIX: Added Import
 import com.example.primeflixlite.data.local.model.ChannelWithProgram
 import com.example.primeflixlite.data.repository.PrimeFlixRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -87,7 +86,8 @@ class HomeViewModel @Inject constructor(
             try {
                 val progressList = repository.getContinueWatching(tab).first()
                 val progressChannels = progressList.mapNotNull { progress ->
-                    allChannels.find { it.channel.url == progress.channelUrl }?.channel
+                    // FIX: Accessed 'channel.url' properly via the embedded object
+                    allChannels.find { it.channel.url == progress.channel.url }?.channel
                 }
                 _uiState.value = _uiState.value.copy(continueWatching = progressChannels)
             } catch (e: Exception) {

@@ -28,7 +28,8 @@ interface ChannelDao {
     @Query("UPDATE streams SET is_favorite = :isFav WHERE url = :url")
     suspend fun setFavorite(url: String, isFav: Boolean)
 
-    // FIX: Ensure table name matches exactly what is in Programme.kt (programmes)
+    // This query joins the streams table with the programmes table
+    // It uses specific column aliases (prog_*) that map to the embedded Programme object
     @Transaction
     @Query("""
         SELECT c.*, 

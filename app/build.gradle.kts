@@ -52,6 +52,8 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    // Fix: Add Material Icons Extended
+    implementation(libs.androidx.compose.material.icons.extended)
 
     // Hilt Dependencies
     implementation(libs.hilt.android)

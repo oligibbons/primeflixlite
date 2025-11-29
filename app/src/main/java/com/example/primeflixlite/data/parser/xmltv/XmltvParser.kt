@@ -103,12 +103,14 @@ class XmltvParser(
     }
 
     private fun parseDate(dateStr: String?): Long? {
-        if (dateStr == null) return null
-        return try {
-            // FIX: Assert non-null !! because we checked it above
-            dateFormat.parse(dateStr!!)?.time
-        } catch (e: Exception) {
-            null
+        // FIX: Using Kotlin's safe call operator `?.let` avoids the need for `!!` assertions
+        // and safely handles the nullable string.
+        return dateStr?.let {
+            try {
+                dateFormat.parse(it)?.time
+            } catch (e: Exception) {
+                null
+            }
         }
     }
 }

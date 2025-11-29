@@ -46,7 +46,7 @@ class GuideViewModel @Inject constructor(
                             .map {
                                 GuideItem(
                                     channel = it.channel,
-                                    // FIX: Changed .currentProgram to .program based on the data class
+                                    // FIX: Use .program (from ChannelWithProgram), not .currentProgram
                                     programs = it.program?.let { p -> listOf(p) } ?: emptyList()
                                 )
                             }
