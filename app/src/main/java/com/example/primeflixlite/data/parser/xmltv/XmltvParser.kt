@@ -14,75 +14,75 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 
-class XmltvParser(private val okHttpClient: OkHttpClient) {
-
+class XmltvParser(
+    private val client: OkHttpClient
+) {
+    // XMLTV dates are usually "yyyyMMddHHmmss Z"
     private val dateFormat = SimpleDateFormat("yyyyMMddHHmmss Z", Locale.getDefault()).apply {
-        timeZone = TimeZone.getTimeZone("UTC")
+        timeZone = TimeZone.getTimeZone("UTC") // Usually UTC in XMLTV
     }
 
-    suspend fun parse(url: String): Flow<List<Programme>> = flow {
+    fun parse(url: String): Flow<List<Programme>> = flow {
         val request = Request.Builder().url(url).build()
-        val response = okHttpClient.newCall(request).execute()
-        if (!response.isSuccessful) return@flow
+        val response = client.newCall(request).execute()
 
         response.body?.byteStream()?.use { inputStream ->
             val parser = Xml.newPullParser()
             parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
             parser.setInput(inputStream, null)
 
-            var eventType = parser.eventType
             val batch = mutableListOf<Programme>()
 
-            while (eventType != XmlPullParser.END_DOCUMENT) {
-                if (eventType == XmlPullParser.START_TAG && parser.name == "programme") {
-                    parseProgramme(parser)?.let {
-                        batch.add(it)
-                        if (batch.size >= 500) {
-                            emit(batch.toList())
-                            batch.clear()
-                        }
+            while (parser.next() != XmlPullParser.END_DOCUMENT) {
+                if (parser.eventType == XmlPullParser.START_TAG && parser.name == "programme") {
+                    readProgramme(parser)?.let { batch.add(it) }
+
+                    // Emit in batches of 500 to keep UI responsive and memory low
+                    if (batch.size >= 500) {
+                        emit(ArrayList(batch))
+                        batch.clear()
                     }
                 }
-                eventType = parser.next()
             }
+            // Emit remaining items
             if (batch.isNotEmpty()) {
                 emit(batch)
             }
         }
     }.flowOn(Dispatchers.IO)
 
-    private fun parseProgramme(parser: XmlPullParser): Programme? {
+    private fun readProgramme(parser: XmlPullParser): Programme? {
+        val channelId = parser.getAttributeValue(null, "channel") ?: return null
         val startStr = parser.getAttributeValue(null, "start")
         val stopStr = parser.getAttributeValue(null, "stop")
-        val channelId = parser.getAttributeValue(null, "channel")
 
         var title = ""
-        var desc = ""
+        var desc: String? = null
 
-        while (parser.next() != XmlPullParser.END_TAG) {
-            if (parser.eventType != XmlPullParser.START_TAG) continue
-            when (parser.name) {
-                "title" -> title = readText(parser)
-                "desc" -> desc = readText(parser)
-                else -> skip(parser)
+        val start = parseDate(startStr) ?: 0L
+        val end = parseDate(stopStr) ?: 0L
+
+        while (parser.next() != XmlPullParser.END_TAG || parser.name != "programme") {
+            if (parser.eventType == XmlPullParser.START_TAG) {
+                when (parser.name) {
+                    "title" -> title = readText(parser)
+                    "desc" -> desc = readText(parser)
+                    else -> skip(parser)
+                }
             }
         }
 
-        return try {
-            val startTime = dateFormat.parse(startStr)?.time ?: 0L
-            val endTime = dateFormat.parse(stopStr)?.time ?: 0L
+        // Basic validation: must have title and valid time
+        if (title.isEmpty() || start == 0L || end == 0L) return null
 
-            Programme(
-                channelId = channelId ?: "",
-                title = title,
-                description = desc,
-                start = startTime, // Fixed: startTime -> start
-                end = endTime,     // Fixed: endTime -> end
-                playlistUrl = ""   // Will be filled by Repository
-            )
-        } catch (e: Exception) {
-            null
-        }
+        return Programme(
+            channelId = channelId,
+            playlistUrl = "", // Set by Repository later
+            title = title,
+            description = desc,
+            start = start,
+            end = end
+        )
     }
 
     private fun readText(parser: XmlPullParser): String {
@@ -102,6 +102,16 @@ class XmltvParser(private val okHttpClient: OkHttpClient) {
                 XmlPullParser.END_TAG -> depth--
                 XmlPullParser.START_TAG -> depth++
             }
+        }
+    }
+
+    private fun parseDate(dateStr: String?): Long? {
+        if (dateStr == null) return null
+        return try {
+            // Handle standard XMLTV format "20230720183000 +0000"
+            dateFormat.parse(dateStr)?.time
+        } catch (e: Exception) {
+            null
         }
     }
 }

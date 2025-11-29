@@ -11,40 +11,15 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ChannelDao {
-    @Query("SELECT * FROM streams WHERE playlist_url = :playlistUrl ORDER BY `group`, title")
+
+    @Query("SELECT * FROM Channel WHERE playlistUrl = :playlistUrl")
     fun getChannelsByPlaylist(playlistUrl: String): Flow<List<Channel>>
-
-    @Query("""
-        SELECT * FROM streams 
-        WHERE title LIKE '%' || :query || '%' 
-        OR `group` LIKE '%' || :query || '%'
-        LIMIT 50
-    """)
-    fun searchChannels(query: String): Flow<List<Channel>>
-
-    // FIX: Updated aliases to match @ColumnInfo names (snake_case)
-    @Transaction
-    @Query("""
-        SELECT c.*, 
-               p.id as prog_id,
-               p.title as prog_title,
-               p.description as prog_description,
-               p.start as prog_start,
-               p.`end` as prog_end,
-               p.icon as prog_icon,
-               p.channel_id as prog_channel_id,
-               p.playlist_url as prog_playlist_url
-        FROM streams c
-        LEFT JOIN programmes p ON c.relation_id = p.channel_id 
-        AND :nowMillis >= p.start AND :nowMillis < p.`end`
-        WHERE c.playlist_url = :playlistUrl
-    """)
-    fun getChannelsWithEpg(playlistUrl: String, nowMillis: Long): Flow<List<ChannelWithProgram>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(channels: List<Channel>)
 
-    @Query("DELETE FROM streams WHERE playlist_url = :playlistUrl")
+    // FIXED: Now implemented for SettingsViewModel
+    @Query("DELETE FROM Channel WHERE playlistUrl = :playlistUrl")
     suspend fun deleteByPlaylist(playlistUrl: String)
 
     @Transaction
@@ -52,4 +27,24 @@ interface ChannelDao {
         deleteByPlaylist(playlistUrl)
         insertAll(channels)
     }
+
+    @Query("SELECT * FROM Channel WHERE title LIKE '%' || :query || '%' ORDER BY title ASC")
+    fun searchChannels(query: String): Flow<List<Channel>>
+
+    @Transaction
+    @Query("""
+        SELECT c.*, p.title as programTitle, p.start as programStart, p.end as programEnd 
+        FROM Channel c 
+        LEFT JOIN Programme p ON c.relationId = p.channelId 
+        AND p.start <= :now AND p.end > :now
+        WHERE c.playlistUrl = :playlistUrl
+    """)
+    fun getChannelsWithEpg(playlistUrl: String, now: Long): Flow<List<ChannelWithProgram>>
+
+    // --- NEW: FAVORITES ---
+    @Query("SELECT * FROM Channel WHERE isFavorite = 1")
+    fun getFavorites(): Flow<List<Channel>>
+
+    @Query("UPDATE Channel SET isFavorite = :isFavorite WHERE url = :url")
+    suspend fun setFavorite(url: String, isFavorite: Boolean)
 }

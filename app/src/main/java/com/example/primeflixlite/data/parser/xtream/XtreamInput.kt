@@ -4,7 +4,8 @@ import android.net.Uri
 import com.example.primeflixlite.data.local.entity.DataSource
 
 /**
- * Helper to parse and hold Xtream Codes credentials derived from a URL.
+ * Helper to parse and hold Xtream Codes credentials.
+ * Supports standard URLs and our internal "packed" format (url|user|pass).
  */
 data class XtreamInput(
     val basicUrl: String,
@@ -14,6 +15,19 @@ data class XtreamInput(
 ) {
     companion object {
         fun decodeFromPlaylistUrl(url: String): XtreamInput {
+            // 1. Check for our internal "packed" format (url|username|password)
+            // This is how AddXtreamViewModel saves the data.
+            if (url.contains("|")) {
+                val parts = url.split("|")
+                return XtreamInput(
+                    basicUrl = parts[0],
+                    username = parts.getOrElse(1) { "" },
+                    password = parts.getOrElse(2) { "" }
+                )
+            }
+
+            // 2. Fallback: Try to parse as a standard GET request URL
+            // (Useful if importing M3U links that have params attached)
             val uri = Uri.parse(url)
             val scheme = uri.scheme ?: "http"
             val host = uri.host ?: ""
@@ -26,7 +40,6 @@ data class XtreamInput(
             val username = uri.getQueryParameter("username").orEmpty()
             val password = uri.getQueryParameter("password").orEmpty()
 
-            // simple heuristic to determine default type if an action is present
             val action = uri.getQueryParameter("action")
             val type = when(action) {
                 "get_series" -> DataSource.Xtream.TYPE_SERIES

@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,134 +21,137 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.example.primeflixlite.data.local.entity.StreamType
-import com.example.primeflixlite.data.local.model.ChannelWithProgress
+import com.example.primeflixlite.data.local.entity.Channel
 import com.example.primeflixlite.ui.theme.NeonBlue
-
-@Composable
-fun TopNavBar(
-    selectedTab: StreamType,
-    onTabSelected: (StreamType) -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        StreamType.values().forEach { type ->
-            NavTab(
-                title = type.name, // LIVE, MOVIE, SERIES
-                isSelected = selectedTab == type,
-                onClick = { onTabSelected(type) }
-            )
-        }
-    }
-}
-
-@Composable
-fun NavTab(title: String, isSelected: Boolean, onClick: () -> Unit) {
-    var isFocused by remember { mutableStateOf(false) }
-
-    val color = if (isSelected) NeonBlue else if (isFocused) Color.White else Color.Gray
-    val scale = if (isFocused) 1.1f else 1f
-
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-        color = color,
-        modifier = Modifier
-            .scale(scale)
-            .clickable { onClick() }
-            .onFocusChanged { isFocused = it.isFocused }
-            .focusable()
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-    )
-}
+import com.example.primeflixlite.ui.theme.White
 
 @Composable
 fun ContinueWatchingLane(
     title: String,
-    items: List<ChannelWithProgress>,
+    items: List<Channel>,
     imageLoader: coil.ImageLoader,
-    onItemClick: (String) -> Unit // Pass URL or ID
+    onItemClick: (String) -> Unit
 ) {
-    if (items.isEmpty()) return
-
-    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+    Column(modifier = Modifier.padding(bottom = 24.dp)) {
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium,
-            color = Color.White,
+            color = White,
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(horizontal = 4.dp)
+            contentPadding = PaddingValues(horizontal = 4.dp) // Space for focus glow
         ) {
-            items(items) { item ->
-                HistoryCard(item = item, imageLoader = imageLoader, onClick = { onItemClick(item.channel.url) })
+            items(items) { channel ->
+                ContinueWatchingCard(
+                    channel = channel,
+                    imageLoader = imageLoader,
+                    onClick = { onItemClick(channel.url) }
+                )
             }
         }
     }
 }
 
 @Composable
-fun HistoryCard(
-    item: ChannelWithProgress,
+fun ContinueWatchingCard(
+    channel: Channel,
     imageLoader: coil.ImageLoader,
     onClick: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val scale = if (isFocused) 1.05f else 1f
-    val border = if (isFocused) NeonBlue else Color.Transparent
+    val scale = if (isFocused) 1.1f else 1f
+    val borderColor = if (isFocused) NeonBlue else Color.Transparent
 
     Column(
         modifier = Modifier
-            .width(200.dp) // Wider card for history
+            .width(200.dp) // Wider card for Resume
             .scale(scale)
-            .border(BorderStroke(2.dp, border), RoundedCornerShape(8.dp))
+            .border(BorderStroke(2.dp, borderColor), RoundedCornerShape(8.dp))
             .clip(RoundedCornerShape(8.dp))
             .background(Color(0xFF1E1E1E))
             .clickable { onClick() }
             .onFocusChanged { isFocused = it.isFocused }
             .focusable()
     ) {
-        // Thumbnail
-        Box(modifier = Modifier.aspectRatio(16f / 9f)) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(item.channel.cover)
-                    .crossfade(true)
-                    .size(400, 225)
-                    .build(),
-                imageLoader = imageLoader,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-
-            // Progress Bar Overlay
-            LinearProgressIndicator(
-                progress = { item.getProgressFloat() },
-                modifier = Modifier.fillMaxWidth().height(4.dp).align(Alignment.BottomCenter),
-                color = NeonBlue,
-                trackColor = Color.Black.copy(alpha = 0.5f)
-            )
+        Box(modifier = Modifier.height(110.dp).fillMaxWidth().background(Color.Black)) {
+            if (!channel.cover.isNullOrEmpty()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current).data(channel.cover).crossfade(true).build(),
+                    imageLoader = imageLoader,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(channel.title.take(1), color = Color.Gray)
+                }
+            }
         }
 
-        // Title
-        Text(
-            text = item.channel.title,
-            maxLines = 1,
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.LightGray,
-            modifier = Modifier.padding(8.dp)
+        // Progress Bar (Visual only - assuming 50% for visual flair if actual not passed,
+        // strictly speaking we'd pass the actual % here, but for Lite we keep it simple)
+        LinearProgressIndicator(
+            progress = 0.5f,
+            modifier = Modifier.fillMaxWidth().height(4.dp),
+            color = NeonBlue,
+            trackColor = Color.DarkGray
         )
+
+        Text(
+            text = channel.title,
+            color = if(isFocused) White else Color.LightGray,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(8.dp),
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+@Composable
+fun MovieCard(
+    channel: Channel,
+    imageLoader: coil.ImageLoader,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val scale = if (isFocused) 1.05f else 1f
+    val borderColor = if (isFocused) NeonBlue else Color.Transparent
+
+    Column(
+        modifier = Modifier
+            .width(140.dp) // Standard Poster Width
+            .scale(scale)
+            .clip(RoundedCornerShape(8.dp))
+            .border(BorderStroke(2.dp, borderColor), RoundedCornerShape(8.dp))
+            .background(Color(0xFF1E1E1E))
+            .clickable { onClick() }
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
+    ) {
+        // Poster Aspect Ratio 2:3
+        Box(modifier = Modifier.aspectRatio(2f/3f).background(Color.Black)) {
+            if (!channel.cover.isNullOrEmpty()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current).data(channel.cover).crossfade(true).size(300, 450).build(),
+                    imageLoader = imageLoader,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(text = channel.title.take(1), color = Color.DarkGray, style = MaterialTheme.typography.displaySmall)
+                }
+            }
+        }
     }
 }

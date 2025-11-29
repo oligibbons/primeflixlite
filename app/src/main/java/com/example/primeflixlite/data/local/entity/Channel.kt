@@ -5,12 +5,6 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-enum class StreamType {
-    LIVE,
-    MOVIE,
-    SERIES
-}
-
 // CRITICAL: Force table name to 'streams' to match your existing DAO queries
 @Entity(
     tableName = "streams",

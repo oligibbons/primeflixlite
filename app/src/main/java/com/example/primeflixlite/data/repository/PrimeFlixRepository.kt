@@ -21,7 +21,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.io.IOException
 
 class PrimeFlixRepository(
     private val playlistDao: PlaylistDao,
@@ -34,38 +33,19 @@ class PrimeFlixRepository(
     private val okHttpClient: OkHttpClient
 ) {
 
+    // --- PLAYLISTS & CHANNELS ---
     val playlists = playlistDao.getAllPlaylists()
-
-    fun searchChannels(query: String) = channelDao.searchChannels(query)
-
-    fun getContinueWatching(type: StreamType) = watchProgressDao.getContinueWatching(type)
-
-    fun getRecentChannels() = watchProgressDao.getRecentChannels()
-
-    suspend fun saveProgress(url: String, position: Long, duration: Long) {
-        if (position < 5000) return
-        val progress = WatchProgress(
-            channelUrl = url,
-            position = position,
-            duration = duration,
-            lastPlayed = System.currentTimeMillis()
-        )
-        watchProgressDao.saveProgress(progress)
-    }
-
-    fun getChannels(playlistUrl: String) = channelDao.getChannelsByPlaylist(playlistUrl)
-
-    fun getChannelsWithEpg(playlistUrl: String): Flow<List<ChannelWithProgram>> {
-        return channelDao.getChannelsWithEpg(playlistUrl, System.currentTimeMillis())
-    }
-
-    suspend fun getCurrentProgram(channelId: String) =
-        programmeDao.getCurrentProgram(channelId, System.currentTimeMillis())
 
     suspend fun addPlaylist(title: String, url: String, source: DataSource) {
         val playlist = Playlist(title = title, url = url, source = source)
         playlistDao.insert(playlist)
         syncPlaylist(playlist)
+    }
+
+    suspend fun deletePlaylist(playlist: Playlist) = withContext(Dispatchers.IO) {
+        playlistDao.delete(playlist)
+        channelDao.deleteByPlaylist(playlist.url)
+        programmeDao.deleteByPlaylist(playlist.url)
     }
 
     suspend fun syncPlaylist(playlist: Playlist) = withContext(Dispatchers.IO) {
@@ -89,6 +69,49 @@ class PrimeFlixRepository(
         }
     }
 
+    fun getChannels(playlistUrl: String) = channelDao.getChannelsByPlaylist(playlistUrl)
+
+    fun getChannelsWithEpg(playlistUrl: String): Flow<List<ChannelWithProgram>> {
+        return channelDao.getChannelsWithEpg(playlistUrl, System.currentTimeMillis())
+    }
+
+    fun searchChannels(query: String) = channelDao.searchChannels(query)
+
+    // --- FAVORITES ---
+    val favorites: Flow<List<Channel>> = channelDao.getFavorites()
+
+    suspend fun toggleFavorite(channel: Channel) {
+        channelDao.setFavorite(channel.url, !channel.isFavorite)
+    }
+
+    // --- WATCH HISTORY ---
+    fun getContinueWatching(type: StreamType) = watchProgressDao.getContinueWatching(type)
+
+    fun getRecentChannels() = watchProgressDao.getRecentChannels()
+
+    suspend fun saveProgress(url: String, position: Long, duration: Long) {
+        if (position < 5000) return
+        val progress = WatchProgress(
+            channelUrl = url,
+            position = position,
+            duration = duration,
+            lastPlayed = System.currentTimeMillis()
+        )
+        watchProgressDao.saveProgress(progress)
+    }
+
+    // --- EPG & METADATA ---
+    suspend fun getCurrentProgram(channelId: String) =
+        programmeDao.getCurrentProgram(channelId, System.currentTimeMillis())
+
+    // CRITICAL: Used by GuideViewModel
+    suspend fun getProgrammesForChannel(channelId: String, start: Long, end: Long) =
+        programmeDao.getProgrammesForChannel(channelId, start, end)
+
+    suspend fun getSeriesEpisodes(playlistUrl: String, seriesId: Int) =
+        xtreamParser.getSeriesEpisodes(XtreamInput.decodeFromPlaylistUrl(playlistUrl), seriesId)
+
+    // --- PRIVATE FETCHERS ---
     private suspend fun fetchXtreamData(playlist: Playlist): List<Channel> {
         val input = XtreamInput.decodeFromPlaylistUrl(playlist.url)
         val items = mutableListOf<Channel>()
@@ -148,7 +171,6 @@ class PrimeFlixRepository(
         val inputStream = response.body?.byteStream() ?: return emptyList()
 
         val items = mutableListOf<Channel>()
-        // Using the extension function we imported
         m3uParser.parse(inputStream).collect { m3u ->
             items.add(m3u.toChannel(playlist.url))
         }

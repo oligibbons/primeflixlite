@@ -1,26 +1,28 @@
 package com.example.primeflixlite.ui.home
 
+import com.example.primeflixlite.data.local.entity.Channel
 import com.example.primeflixlite.data.local.entity.Playlist
 import com.example.primeflixlite.data.local.entity.StreamType
 import com.example.primeflixlite.data.local.model.ChannelWithProgram
-import com.example.primeflixlite.data.local.model.ChannelWithProgress
 
 data class HomeUiState(
     // Global Data
     val playlists: List<Playlist> = emptyList(),
-
-    // Smart Rows Data (New!)
-    val continueWatching: List<ChannelWithProgress> = emptyList(),
-    val recentLive: List<ChannelWithProgress> = emptyList(),
-
-    // Navigation State
     val selectedPlaylist: Playlist? = null,
-    val selectedTab: StreamType = StreamType.LIVE, // LIVE, MOVIE, or SERIES
+
+    // Dashboard Data
+    val selectedTab: StreamType = StreamType.LIVE,
+    val categories: List<String> = emptyList(),
     val selectedCategory: String = "All",
 
-    // Main Grid Content
-    val categories: List<String> = emptyList(), // Categories specific to the current Tab
+    // Content Lists
     val displayedChannels: List<ChannelWithProgram> = emptyList(),
+    val continueWatching: List<Channel> = emptyList(),
 
-    val isLoading: Boolean = false
+    // NEW: "My List" Row Data
+    val favorites: List<Channel> = emptyList(),
+
+    // Status
+    val isLoading: Boolean = false,
+    val error: String? = null
 )

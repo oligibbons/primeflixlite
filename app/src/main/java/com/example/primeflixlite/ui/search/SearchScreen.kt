@@ -1,42 +1,22 @@
 package com.example.primeflixlite.ui.search
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,17 +24,22 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.primeflixlite.data.local.entity.Channel
 import com.example.primeflixlite.data.local.entity.StreamType
-import com.example.primeflixlite.ui.home.MovieCard
+import com.example.primeflixlite.ui.components.NeonTextField
 import com.example.primeflixlite.ui.theme.NeonBlue
 import com.example.primeflixlite.ui.theme.VoidBlack
+import com.example.primeflixlite.ui.theme.White
 
 @Composable
 fun SearchScreen(
@@ -63,14 +48,17 @@ fun SearchScreen(
     onChannelClick: (Channel) -> Unit,
     onBack: () -> Unit
 ) {
-    val query by viewModel.query.collectAsState()
-    val results by viewModel.results.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
+    val focusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
 
-    val inputFocusRequester = remember { FocusRequester() }
-
+    // Auto-focus the search bar on entry
     LaunchedEffect(Unit) {
-        inputFocusRequester.requestFocus()
+        focusRequester.requestFocus()
+    }
+
+    BackHandler {
+        onBack()
     }
 
     Column(
@@ -79,70 +67,35 @@ fun SearchScreen(
             .background(VoidBlack)
             .padding(24.dp)
     ) {
-        // --- HEADER & SEARCH BAR ---
+        // --- SEARCH HEADER ---
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(bottom = 24.dp)
+            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
         ) {
-            // Back Button
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
-                tint = Color.Gray,
-                modifier = Modifier
-                    .size(32.dp)
-                    .clickable { onBack() }
-                    .focusable()
-            )
-
-            Spacer(modifier = Modifier.width(24.dp))
-
-            // Search Input Field
-            var isFocused by remember { mutableStateOf(false) }
-            val borderColor = if (isFocused) NeonBlue else Color.DarkGray
-
-            BasicTextField(
-                value = query,
-                onValueChange = { viewModel.onQueryChange(it) },
-                textStyle = TextStyle(color = Color.White, fontSize = 20.sp),
-                cursorBrush = SolidColor(NeonBlue),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { defaultKeyboardAction(ImeAction.Search) }),
-                decorationBox = { innerTextField ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .border(2.dp, borderColor, RoundedCornerShape(8.dp))
-                            .background(Color(0xFF1E1E1E))
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray)
-                        Spacer(modifier = Modifier.width(12.dp))
-                        if (query.isEmpty()) {
-                            Text("Search Channels, Movies, Series...", color = Color.Gray)
-                        }
-                        innerTextField()
-                    }
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .focusRequester(inputFocusRequester)
-                    .onFocusChanged { isFocused = it.isFocused }
-                    .focusable()
-            )
+            Icon(Icons.Default.Search, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(32.dp))
+            Spacer(modifier = Modifier.width(16.dp))
+            Box(modifier = Modifier.weight(1f).focusRequester(focusRequester)) {
+                NeonTextField(
+                    value = uiState.query,
+                    onValueChange = { viewModel.onQueryChange(it) },
+                    label = "Search Channels, Movies, Series...",
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() })
+                )
+            }
         }
 
-        // --- RESULTS ---
-        if (isLoading) {
+        // --- RESULTS AREA ---
+        if (uiState.isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = NeonBlue)
             }
-        } else if (results.isEmpty() && query.length >= 2) {
+        } else if (uiState.results.isEmpty() && uiState.hasSearched) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No results found for \"$query\"", color = Color.Gray)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("No results in the Void", color = Color.Gray, fontSize = 18.sp)
+                    Text("Try a different term", color = Color.DarkGray, fontSize = 14.sp)
+                }
             }
         } else {
             LazyVerticalGrid(
@@ -151,25 +104,81 @@ fun SearchScreen(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(bottom = 32.dp)
             ) {
-                items(results, key = { it.id }) { channel ->
-                    // Logic to display appropriate card based on type
-                    if (channel.type == StreamType.MOVIE || channel.type == StreamType.SERIES) {
-                        MovieCard(
-                            channel = channel,
-                            imageLoader = imageLoader,
-                            onClick = { onChannelClick(channel) }
-                        )
-                    } else {
-                        // Reusing the MovieCard style for TV results in search looks cleaner than mixing aspect ratios
-                        // Or we can create a simplified mini-card. For now, MovieCard works well for lists.
-                        MovieCard(
-                            channel = channel,
-                            imageLoader = imageLoader,
-                            onClick = { onChannelClick(channel) }
-                        )
-                    }
+                items(uiState.results) { channel ->
+                    SearchResultCard(
+                        channel = channel,
+                        imageLoader = imageLoader,
+                        onClick = { onChannelClick(channel) }
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+fun SearchResultCard(channel: Channel, imageLoader: coil.ImageLoader, onClick: () -> Unit) {
+    var isFocused by remember { mutableStateOf(false) }
+    val borderColor = if (isFocused) NeonBlue else Color.Transparent
+
+    Column(
+        modifier = Modifier
+            .width(140.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .border(2.dp, borderColor, RoundedCornerShape(8.dp))
+            .background(Color(0xFF1E1E1E))
+            .clickable { onClick() }
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
+    ) {
+        // Poster / Icon
+        Box(modifier = Modifier.aspectRatio(2f/3f).background(Color.Black)) {
+            if (!channel.cover.isNullOrEmpty()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current).data(channel.cover).crossfade(true).build(),
+                    imageLoader = imageLoader,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = channel.title.take(1),
+                        color = Color.Gray,
+                        style = MaterialTheme.typography.displaySmall
+                    )
+                }
+            }
+            // Type Badge
+            val badgeColor = when(channel.type) {
+                StreamType.LIVE -> Color.Red
+                StreamType.MOVIE -> NeonBlue
+                StreamType.SERIES -> Color.Yellow
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .background(badgeColor.copy(alpha = 0.8f), RoundedCornerShape(bottomStart = 8.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = channel.type.name.take(1),
+                    color = Color.Black,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        // Title
+        Text(
+            text = channel.title,
+            color = if (isFocused) White else Color.LightGray,
+            fontSize = 12.sp,
+            maxLines = 2,
+            modifier = Modifier.padding(8.dp),
+            textAlign = TextAlign.Center
+        )
     }
 }

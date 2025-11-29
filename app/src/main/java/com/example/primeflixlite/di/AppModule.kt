@@ -1,74 +1,130 @@
 package com.example.primeflixlite.di
 
 import android.content.Context
-import android.graphics.Bitmap
 import androidx.room.Room
 import coil.ImageLoader
+import coil.disk.DiskCache
 import coil.memory.MemoryCache
-import coil.request.CachePolicy
 import com.example.primeflixlite.data.local.PrimeFlixDatabase
+import com.example.primeflixlite.data.local.dao.ChannelDao
+import com.example.primeflixlite.data.local.dao.PlaylistDao
+import com.example.primeflixlite.data.local.dao.ProgrammeDao
+import com.example.primeflixlite.data.local.dao.WatchProgressDao
+import com.example.primeflixlite.data.parser.m3u.M3UParser
 import com.example.primeflixlite.data.parser.m3u.M3UParserImpl
 import com.example.primeflixlite.data.parser.xmltv.XmltvParser
+import com.example.primeflixlite.data.parser.xtream.XtreamParser
 import com.example.primeflixlite.data.parser.xtream.XtreamParserImpl
 import com.example.primeflixlite.data.repository.PrimeFlixRepository
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
+import javax.inject.Singleton
 
-class AppModule(private val context: Context) {
+@Module
+@InstallIn(SingletonComponent::class)
+object AppModule {
 
-    // 1. Network Client
-    private val okHttpClient: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
-            .build()
-    }
-
-    // 2. Database
-    private val database: PrimeFlixDatabase by lazy {
-        Room.databaseBuilder(
-            context.applicationContext,
+    @Provides
+    @Singleton
+    fun provideDatabase(@ApplicationContext context: Context): PrimeFlixDatabase {
+        return Room.databaseBuilder(
+            context,
             PrimeFlixDatabase::class.java,
-            "primeflix-lite.db"
+            "primeflix_db"
         )
-            .fallbackToDestructiveMigration()
+            .fallbackToDestructiveMigration() // Safety for dev
             .build()
     }
 
-    // 3. Parsers
-    private val xtreamParser by lazy { XtreamParserImpl(okHttpClient) }
-    private val m3uParser by lazy { M3UParserImpl() }
-    private val xmltvParser by lazy { XmltvParser(okHttpClient) }
+    @Provides
+    fun providePlaylistDao(db: PrimeFlixDatabase): PlaylistDao = db.playlistDao()
 
-    // 4. Image Loader (50MB Cap)
-    val imageLoader: ImageLoader by lazy {
-        ImageLoader.Builder(context)
-            .okHttpClient(okHttpClient)
+    @Provides
+    fun provideChannelDao(db: PrimeFlixDatabase): ChannelDao = db.channelDao()
+
+    @Provides
+    fun provideProgrammeDao(db: PrimeFlixDatabase): ProgrammeDao = db.programmeDao()
+
+    @Provides
+    fun provideWatchProgressDao(db: PrimeFlixDatabase): WatchProgressDao = db.watchProgressDao()
+
+    @Provides
+    @Singleton
+    fun provideOkHttpClient(): OkHttpClient {
+        return OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build() // Add logging interceptor here if debugging needed
+    }
+
+    @Provides
+    @Singleton
+    fun provideXtreamParser(client: OkHttpClient): XtreamParser {
+        return XtreamParserImpl(client)
+    }
+
+    @Provides
+    @Singleton
+    fun provideM3UParser(): M3UParser {
+        return M3UParserImpl()
+    }
+
+    @Provides
+    @Singleton
+    fun provideXmltvParser(client: OkHttpClient): XmltvParser {
+        // Assuming XmltvParser implementation handles the client or fetching internally
+        // If your XmltvParser is just a class, instantiate it here.
+        // Based on previous context, likely:
+        return XmltvParser(client)
+    }
+
+    @Provides
+    @Singleton
+    fun provideRepository(
+        playlistDao: PlaylistDao,
+        channelDao: ChannelDao,
+        programmeDao: ProgrammeDao,
+        watchProgressDao: WatchProgressDao,
+        xtreamParser: XtreamParser,
+        m3uParser: M3UParser,
+        xmltvParser: XmltvParser,
+        okHttpClient: OkHttpClient
+    ): PrimeFlixRepository {
+        return PrimeFlixRepository(
+            playlistDao,
+            channelDao,
+            programmeDao,
+            watchProgressDao,
+            xtreamParser,
+            m3uParser,
+            xmltvParser,
+            okHttpClient
+        )
+    }
+
+    @Provides
+    @Singleton
+    fun provideImageLoader(@ApplicationContext context: Context, client: OkHttpClient): ImageLoader {
+        return ImageLoader.Builder(context)
+            .okHttpClient(client)
             .memoryCache {
                 MemoryCache.Builder(context)
-                    .maxSizePercent(0.15)
-                    .maxSizeBytes(50 * 1024 * 1024)
+                    .maxSizePercent(0.25)
                     .build()
             }
-            .diskCachePolicy(CachePolicy.ENABLED)
-            .memoryCachePolicy(CachePolicy.ENABLED)
-            .networkCachePolicy(CachePolicy.ENABLED)
-            .bitmapConfig(Bitmap.Config.RGB_565)
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(context.cacheDir.resolve("image_cache"))
+                    .maxSizePercent(0.02)
+                    .build()
+            }
             .crossfade(true)
             .build()
-    }
-
-    // 5. Repository
-    val repository: PrimeFlixRepository by lazy {
-        PrimeFlixRepository(
-            playlistDao = database.playlistDao(),
-            channelDao = database.channelDao(),
-            programmeDao = database.programmeDao(),
-            watchProgressDao = database.watchProgressDao(), // NEW: Pass the DAO
-            xtreamParser = xtreamParser,
-            m3uParser = m3uParser,
-            xmltvParser = xmltvParser,
-            okHttpClient = okHttpClient
-        )
     }
 }

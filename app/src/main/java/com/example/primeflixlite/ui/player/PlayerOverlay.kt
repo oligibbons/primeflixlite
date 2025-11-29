@@ -1,161 +1,199 @@
 package com.example.primeflixlite.ui.player
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.primeflixlite.data.local.entity.Channel
 import com.example.primeflixlite.data.local.entity.Programme
 import com.example.primeflixlite.ui.theme.NeonBlue
+import com.example.primeflixlite.ui.theme.VoidBlack
+import com.example.primeflixlite.ui.theme.White
 import com.example.primeflixlite.util.TimeUtils
 
 @Composable
 fun PlayerOverlay(
-    channel: Channel?,
+    channel: Channel,
     program: Programme?,
-    isVisible: Boolean,
-    isBuffering: Boolean,
-    error: String?,
-    videoAspectRatio: String
+    isPlaying: Boolean,
+    currentPosition: Long,
+    duration: Long,
+    onPlayPause: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onNext: () -> Unit,
+    onPrev: () -> Unit,
+    onResize: () -> Unit,
+    onFavorite: () -> Unit, // NEW callback
+    onBack: () -> Unit
 ) {
-    if (error != null) {
-        Box(
-            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.Warning, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(50.dp))
-                Spacer(Modifier.height(16.dp))
-                Text("Stream Unavailable", color = Color.White, style = MaterialTheme.typography.titleLarge)
-                Text(error, color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-    } else if (isBuffering) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = NeonBlue)
+    var areControlsVisible by remember { mutableStateOf(false) }
+
+    // Auto-hide controls
+    LaunchedEffect(areControlsVisible, isPlaying) {
+        if (areControlsVisible && isPlaying) {
+            kotlinx.coroutines.delay(4000)
+            areControlsVisible = false
         }
     }
 
-    AnimatedVisibility(
-        visible = isVisible,
-        enter = fadeIn(),
-        exit = fadeOut()
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { areControlsVisible = !areControlsVisible }
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.8f),
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.95f)
-                        )
-                    )
-                )
-        ) {
-            Row(
+
+        // Massive Pause Icon
+        val iconAlpha by animateFloatAsState(targetValue = if (!isPlaying) 1f else 0f)
+        if (iconAlpha > 0f) {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopStart)
-                    .padding(32.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .align(Alignment.Center)
+                    .size(120.dp)
+                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.Center
             ) {
-                Row {
-                    Text("LIVE", color = Color.Red, fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 8.dp))
-                    Text(channel?.group ?: "Unknown", color = Color.LightGray)
-                }
-                Text("Aspect: $videoAspectRatio", color = NeonBlue, fontSize = 12.sp)
+                Icon(
+                    imageVector = Icons.Default.Pause,
+                    contentDescription = null,
+                    tint = NeonBlue.copy(alpha = iconAlpha),
+                    modifier = Modifier.size(80.dp)
+                )
             }
+        }
 
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .padding(start = 48.dp, end = 48.dp, bottom = 48.dp)
-            ) {
-                Text(
-                    text = channel?.title ?: "",
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold),
-                    color = Color.White
+        // Controls
+        AnimatedVisibility(
+            visible = areControlsVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color.Black.copy(alpha = 0.8f), Color.Transparent, Color.Black.copy(alpha = 0.9f))
+                    )
                 )
+            ) {
+                // TOP BAR
+                Row(modifier = Modifier.fillMaxWidth().padding(32.dp), verticalAlignment = Alignment.CenterVertically) {
+                    PlayerButton(icon = Icons.Default.ArrowBack, onClick = onBack)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text(text = channel.title, style = MaterialTheme.typography.headlineSmall, color = White, fontWeight = FontWeight.Bold)
+                        // Display EPG if available
+                        if (program != null) {
+                            Text(
+                                text = "${TimeUtils.formatTime(program.start)} - ${TimeUtils.formatTime(program.end)}: ${program.title}",
+                                color = NeonBlue,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        } else if (channel.group.isNotEmpty()) {
+                            Text(text = channel.group, color = Color.Gray)
+                        }
+                    }
+                    Spacer(Modifier.weight(1f))
+                    // Resize Button
+                    PlayerButton(icon = Icons.Default.AspectRatio, onClick = onResize)
+                }
 
-                Spacer(Modifier.height(8.dp))
-
-                if (program != null) {
-                    Text(
-                        text = program.title,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = NeonBlue
+                // BOTTOM BAR
+                Column(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(32.dp)) {
+                    // Seek Bar
+                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                        Text(text = TimeUtils.formatDuration(currentPosition), color = NeonBlue)
+                        Text(text = TimeUtils.formatDuration(duration), color = Color.Gray)
+                    }
+                    Slider(
+                        value = if (duration > 0) currentPosition.toFloat() else 0f,
+                        onValueChange = { onSeek(it.toLong()) },
+                        valueRange = 0f..(duration.toFloat().coerceAtLeast(1f)),
+                        colors = SliderDefaults.colors(thumbColor = NeonBlue, activeTrackColor = NeonBlue, inactiveTrackColor = Color.DarkGray),
+                        modifier = Modifier.fillMaxWidth()
                     )
 
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Media Controls Row
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween, // Spread items out
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // FIXED: Uses 'start' and 'end' instead of 'startTime'/'endTime'
-                        Text(
-                            text = TimeUtils.getDurationString(program.start, program.end),
-                            color = Color.Gray,
-                            fontSize = 14.sp,
-                            modifier = Modifier.width(100.dp)
+                        // Left: Favorite Button
+                        PlayerButton(
+                            icon = if (channel.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
+                            onClick = onFavorite,
+                            iconColorOverride = if (channel.isFavorite) Color.Red else White
                         )
 
-                        LinearProgressIndicator(
-                            progress = { TimeUtils.getProgress(program.start, program.end) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(6.dp)
-                                .padding(horizontal = 12.dp)
-                                .background(Color.DarkGray, RoundedCornerShape(2.dp)),
-                            color = NeonBlue,
-                            trackColor = Color.DarkGray,
-                        )
-                    }
+                        // Center: Playback Controls
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            PlayerButton(icon = Icons.Default.SkipPrevious, onClick = onPrev)
+                            Spacer(Modifier.width(24.dp))
+                            PlayerButton(icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, onClick = onPlayPause, isPrimary = true)
+                            Spacer(Modifier.width(24.dp))
+                            PlayerButton(icon = Icons.Default.SkipNext, onClick = onNext)
+                        }
 
-                    if (!program.description.isNullOrEmpty()) {
-                        Text(
-                            text = program.description,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.LightGray,
-                            maxLines = 2
-                        )
+                        // Right: Spacer to balance layout (empty box of same size as favorite button)
+                        Box(modifier = Modifier.size(48.dp))
                     }
-                } else {
-                    Text(
-                        text = "No Program Information",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Color.DarkGray
-                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+fun PlayerButton(
+    icon: ImageVector,
+    onClick: () -> Unit,
+    isPrimary: Boolean = false,
+    iconColorOverride: Color? = null
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
+    val size = if (isPrimary) 64.dp else 48.dp
+    val iconSize = if (isPrimary) 32.dp else 24.dp
+    val bgColor = if (isFocused) NeonBlue else if (isPrimary) White else Color.Transparent
+
+    // Determine icon color: Focused -> White, Primary -> Black, Override -> Custom, Default -> White
+    val iconColor = if (isFocused) White
+    else if (isPrimary) VoidBlack
+    else iconColorOverride ?: White
+
+    Box(
+        modifier = Modifier
+            .size(size)
+            .background(bgColor, RoundedCornerShape(50))
+            .clickable(interactionSource = interactionSource, indication = null) { onClick() }
+            .focusable(interactionSource = interactionSource),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(imageVector = icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(iconSize))
     }
 }

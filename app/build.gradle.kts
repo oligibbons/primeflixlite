@@ -47,6 +47,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     // ADDED THIS LINE:
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -57,8 +58,8 @@ dependencies {
     // --- PRIMEFLIX ADDITIONS ---
 
     // 1. Room Database (The Memory)
-    // Using alpha12 to fix KSP 2.0 crash
-    val room_version = "2.7.0-alpha12"
+    // Downgraded to alpha11 to match Kotlin 2.0.21 and fix StackOverflowError
+    val room_version = "2.7.0-alpha11"
     implementation("androidx.room:room-runtime:$room_version")
     implementation("androidx.room:room-ktx:$room_version")
     ksp("androidx.room:room-compiler:$room_version")

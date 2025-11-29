@@ -14,7 +14,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -43,8 +46,8 @@ import com.example.primeflixlite.data.local.entity.Channel
 import com.example.primeflixlite.data.local.entity.Playlist
 import com.example.primeflixlite.data.local.entity.StreamType
 import com.example.primeflixlite.data.local.model.ChannelWithProgram
+import com.example.primeflixlite.ui.theme.BurntYellow
 import com.example.primeflixlite.ui.theme.NeonBlue
-import com.example.primeflixlite.ui.theme.NeonBlueDim
 import com.example.primeflixlite.ui.theme.VoidBlack
 import com.example.primeflixlite.util.TimeUtils
 
@@ -53,7 +56,10 @@ fun HomeScreen(
     viewModel: HomeViewModel,
     imageLoader: coil.ImageLoader,
     onChannelClick: (Channel) -> Unit,
-    onSearchClick: () -> Unit
+    onSearchClick: () -> Unit,
+    onAddAccountClick: () -> Unit,
+    onGuideClick: () -> Unit,    // NEW: Callback for Guide
+    onSettingsClick: () -> Unit  // NEW: Callback for Settings
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val initialFocusRequester = remember { FocusRequester() }
@@ -61,8 +67,11 @@ fun HomeScreen(
 
     LaunchedEffect(uiState.isLoading) {
         if (!uiState.isLoading && !hasFocused) {
-            initialFocusRequester.requestFocus()
-            hasFocused = true
+            // Only auto-focus if we have content
+            if (uiState.categories.isNotEmpty()) {
+                initialFocusRequester.requestFocus()
+                hasFocused = true
+            }
         }
     }
 
@@ -77,7 +86,25 @@ fun HomeScreen(
             .padding(24.dp)
     ) {
         if (uiState.selectedPlaylist == null) {
-            Text("Select Playlist", style = MaterialTheme.typography.headlineMedium, color = Color.White)
+            // --- PLAYLIST SELECTION MODE ---
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Select Profile", style = MaterialTheme.typography.headlineMedium, color = Color.White)
+
+                // "Add New" Button
+                Button(
+                    onClick = onAddAccountClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonBlue)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Connect Account", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            }
+
             LazyVerticalGrid(columns = GridCells.Fixed(2), modifier = Modifier.padding(top = 24.dp)) {
                 items(uiState.playlists) { playlist ->
                     PlaylistRow(
@@ -87,21 +114,42 @@ fun HomeScreen(
                     )
                 }
             }
+
+            // Empty State (No Playlists)
             if (uiState.playlists.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Button(onClick = { viewModel.addSamplePlaylist() }) {
-                        Text("Load Sample Playlist")
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "Welcome to PrimeFlix+",
+                            style = MaterialTheme.typography.headlineLarge,
+                            color = Color.White
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            "Connect your Xtream Codes account to start.",
+                            color = Color.Gray
+                        )
+                        Spacer(Modifier.height(32.dp))
+                        Button(
+                            onClick = onAddAccountClick,
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonBlue),
+                            modifier = Modifier.scale(1.2f)
+                        ) {
+                            Text("Connect Now", color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
 
         } else {
+            // --- CONTENT DASHBOARD MODE ---
             Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                // Left Side: Tabs + Guide Button
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     StreamType.values().forEach { type ->
                         NavTab(
                             title = type.name,
@@ -109,20 +157,51 @@ fun HomeScreen(
                             onClick = { viewModel.selectTab(type) }
                         )
                     }
+
+                    // NEW: TV Guide Button (Only visible in Live tab)
+                    if (uiState.selectedTab == StreamType.LIVE) {
+                        Spacer(Modifier.width(16.dp))
+                        Button(
+                            onClick = onGuideClick,
+                            colors = ButtonDefaults.buttonColors(containerColor = BurntYellow), // Use secondary color
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                            modifier = Modifier.height(36.dp)
+                        ) {
+                            Icon(Icons.Default.List, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("TV GUIDE", color = Color.Black, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
                 }
 
-                var searchFocused by remember { mutableStateOf(false) }
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = "Search",
-                    tint = if(searchFocused) NeonBlue else Color.White,
-                    modifier = Modifier
-                        .size(32.dp)
-                        .scale(if(searchFocused) 1.2f else 1f)
-                        .clickable { onSearchClick() }
-                        .onFocusChanged { searchFocused = it.isFocused }
-                        .focusable()
-                )
+                // Right Side: Search + Settings Icons
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    var searchFocused by remember { mutableStateOf(false) }
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = if(searchFocused) NeonBlue else Color.White,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .scale(if(searchFocused) 1.2f else 1f)
+                            .clickable { onSearchClick() }
+                            .onFocusChanged { searchFocused = it.isFocused }
+                            .focusable()
+                    )
+
+                    var settingsFocused by remember { mutableStateOf(false) }
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        tint = if(settingsFocused) NeonBlue else Color.White,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .scale(if(settingsFocused) 1.2f else 1f)
+                            .clickable { onSettingsClick() }
+                            .onFocusChanged { settingsFocused = it.isFocused }
+                            .focusable()
+                    )
+                }
             }
 
             if (uiState.isLoading) {
@@ -131,6 +210,20 @@ fun HomeScreen(
                 }
             } else {
                 Column(modifier = Modifier.fillMaxSize()) {
+
+                    // NEW: "My List" / Favorites Row
+                    if (uiState.favorites.isNotEmpty()) {
+                        ContinueWatchingLane(
+                            title = "My List",
+                            items = uiState.favorites,
+                            imageLoader = imageLoader,
+                            onItemClick = { url ->
+                                val channel = uiState.favorites.find { it.url == url }
+                                if (channel != null) onChannelClick(channel)
+                            }
+                        )
+                    }
+
                     if (uiState.continueWatching.isNotEmpty()) {
                         ContinueWatchingLane(
                             title = "Continue Watching",
@@ -138,6 +231,7 @@ fun HomeScreen(
                             imageLoader = imageLoader,
                             onItemClick = { url ->
                                 val channel = uiState.displayedChannels.find { it.channel.url == url }?.channel
+                                    ?: uiState.continueWatching.find { it.url == url }
                                 if (channel != null) onChannelClick(channel)
                             }
                         )
@@ -185,6 +279,27 @@ fun HomeScreen(
             }
         }
     }
+}
+
+// --- LOCAL HELPERS ---
+
+@Composable
+fun NavTab(title: String, isSelected: Boolean, onClick: () -> Unit) {
+    var isFocused by remember { mutableStateOf(false) }
+    val color = if (isSelected) NeonBlue else if (isFocused) Color.White else Color.Gray
+    val fontWeight = if (isSelected || isFocused) FontWeight.Bold else FontWeight.Normal
+
+    Text(
+        text = title,
+        color = color,
+        fontWeight = fontWeight,
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier
+            .clickable { onClick() }
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
+            .padding(8.dp)
+    )
 }
 
 @Composable

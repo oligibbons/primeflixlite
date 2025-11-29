@@ -1,32 +1,29 @@
 package com.example.primeflixlite.ui.player
 
-import android.view.KeyEvent
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.example.primeflixlite.data.local.entity.Channel
+import com.example.primeflixlite.ui.theme.VoidBlack
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -37,107 +34,107 @@ fun PlayerScreen(
 ) {
     val context = LocalContext.current
 
-    val currentChannel by viewModel.currentChannel.collectAsState()
-    val currentProgram by viewModel.currentProgram.collectAsState()
-    val isVisible by viewModel.overlayVisible.collectAsState()
-    val resizeMode by viewModel.resizeMode.collectAsState()
-
-    var isBuffering by remember { mutableStateOf(true) }
-    var errorMsg by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(Unit) {
+    // 1. Initialize ViewModel with the starting channel
+    LaunchedEffect(initialChannel) {
         viewModel.initialize(initialChannel)
     }
 
-    val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            playWhenReady = true
-        }
+    // 2. Observe ViewModel State
+    val currentChannel by viewModel.currentChannel.collectAsState()
+    val currentProgram by viewModel.currentProgram.collectAsState()
+    val resizeMode by viewModel.resizeMode.collectAsState()
+
+    // 3. Setup ExoPlayer
+    val player = remember {
+        val loadControl = DefaultLoadControl.Builder()
+            .setAllocator(DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE))
+            .setBufferDurationsMs(15_000, 50_000, 1_500, 3_000)
+            .build()
+
+        ExoPlayer.Builder(context)
+            .setLoadControl(loadControl)
+            .build().apply {
+                playWhenReady = true
+            }
     }
 
+    // 4. Handle Channel Changes (Zapping)
     LaunchedEffect(currentChannel) {
         currentChannel?.let { channel ->
-            errorMsg = null
-            isBuffering = true
-            try {
-                exoPlayer.stop()
-                val mediaItem = MediaItem.fromUri(channel.url)
-                exoPlayer.setMediaItem(mediaItem)
-                exoPlayer.prepare()
-                exoPlayer.play()
-            } catch (e: Exception) {
-                errorMsg = "Playback Error: ${e.message}"
-            }
+            val mediaItem = MediaItem.fromUri(channel.url)
+            player.setMediaItem(mediaItem)
+            player.prepare()
+            viewModel.startProgressTracking(player)
         }
     }
 
-    DisposableEffect(exoPlayer) {
+    // 5. Sync Player State to UI
+    var isPlaying by remember { mutableStateOf(true) }
+    var currentPosition by remember { mutableStateOf(0L) }
+    var duration by remember { mutableStateOf(0L) }
+
+    LaunchedEffect(player) {
         val listener = object : Player.Listener {
+            override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
             override fun onPlaybackStateChanged(state: Int) {
-                isBuffering = state == Player.STATE_BUFFERING
-                if (state == Player.STATE_READY) errorMsg = null
-            }
-            override fun onPlayerError(error: PlaybackException) {
-                errorMsg = "Stream Error: ${error.errorCodeName}"
-                isBuffering = false
+                if (state == Player.STATE_READY) duration = player.duration
             }
         }
-        exoPlayer.addListener(listener)
-
-        onDispose {
-            if (exoPlayer.duration > 0 && exoPlayer.currentPosition > 0) {
-                viewModel.onPause(exoPlayer.currentPosition, exoPlayer.duration)
-            }
-            exoPlayer.removeListener(listener)
-            exoPlayer.release()
+        player.addListener(listener)
+        while (isActive) {
+            currentPosition = player.currentPosition
+            delay(1000)
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .onKeyEvent { event ->
-                if (event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
-                    viewModel.showOverlay()
-                    when (event.nativeKeyEvent.keyCode) {
-                        KeyEvent.KEYCODE_DPAD_UP -> { viewModel.nextChannel(); true }
-                        KeyEvent.KEYCODE_DPAD_DOWN -> { viewModel.prevChannel(); true }
-                        KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> { viewModel.toggleResizeMode(); true }
-                        KeyEvent.KEYCODE_BACK -> { onBack(); true }
-                        else -> false
-                    }
-                } else false
-            }
-            .focusable()
-    ) {
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.saveFinalProgress(player.currentPosition, player.duration)
+            player.release()
+        }
+    }
+
+    BackHandler { onBack() }
+
+    Box(modifier = Modifier.fillMaxSize().background(VoidBlack)) {
+        // Video Surface
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
-                    player = exoPlayer
+                    this.player = player
                     useController = false
-                    // Fixed: Explicit usage of setter/property in factory
-                    this.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    layoutParams = FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
                 }
             },
             update = { view ->
-                // Fixed: Explicit setter usage to avoid 'val' error
+                // Update resize mode dynamically
                 view.resizeMode = when(resizeMode) {
-                    1 -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                    2 -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+                    1 -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+                    2 -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
                 }
             },
             modifier = Modifier.fillMaxSize()
         )
 
-        PlayerOverlay(
-            channel = currentChannel,
-            program = currentProgram,
-            isVisible = isVisible,
-            isBuffering = isBuffering,
-            error = errorMsg,
-            videoAspectRatio = when(resizeMode) { 1 -> "ZOOM" 2 -> "STRETCH" else -> "FIT" }
-        )
+        // Overlay with Zapping & EPG
+        if (currentChannel != null) {
+            PlayerOverlay(
+                channel = currentChannel!!,
+                program = currentProgram,
+                isPlaying = isPlaying,
+                currentPosition = currentPosition,
+                duration = duration,
+                onPlayPause = { if (player.isPlaying) player.pause() else player.play() },
+                onSeek = { player.seekTo(it); currentPosition = it },
+                onNext = { viewModel.nextChannel() },
+                onPrev = { viewModel.prevChannel() },
+                onResize = { viewModel.toggleResizeMode() },
+                onBack = onBack
+            )
+        }
     }
 }

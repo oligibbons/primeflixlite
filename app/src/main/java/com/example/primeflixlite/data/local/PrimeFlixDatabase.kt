@@ -16,16 +16,17 @@ import com.example.primeflixlite.data.local.entity.WatchProgress
     entities = [
         Playlist::class,
         Channel::class,
-        Programme::class,
-        WatchProgress::class // NEW: Register the history table
+        Programme::class,      // NEW: EPG Data
+        WatchProgress::class
     ],
-    version = 4, // Version Bump: Added WatchProgress
+    version = 1,
     exportSchema = false
 )
-@TypeConverters(Converters::class)
+@TypeConverters(Converters::class) // Ensures StreamType enum works
 abstract class PrimeFlixDatabase : RoomDatabase() {
+
     abstract fun playlistDao(): PlaylistDao
     abstract fun channelDao(): ChannelDao
     abstract fun programmeDao(): ProgrammeDao
-    abstract fun watchProgressDao(): WatchProgressDao // NEW: Expose the DAO
+    abstract fun watchProgressDao(): WatchProgressDao
 }

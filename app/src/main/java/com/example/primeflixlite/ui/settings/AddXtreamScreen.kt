@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.primeflixlite.ui.components.NeonTextField
+import com.example.primeflixlite.ui.theme.BurntYellow
 import com.example.primeflixlite.ui.theme.NeonBlue
 import com.example.primeflixlite.ui.theme.VoidBlack
 import com.example.primeflixlite.ui.theme.White
@@ -96,7 +97,8 @@ fun AddXtreamScreen(
             onClick = { viewModel.validateAndSave() },
             enabled = !uiState.isLoading,
             colors = ButtonDefaults.buttonColors(
-                containerColor = NeonBlue,
+                containerColor = BurntYellow, // THEME UPDATE: Primary Yellow for Action
+                contentColor = VoidBlack,     // Black text on Yellow for industrial contrast
                 disabledContainerColor = Color.DarkGray
             ),
             modifier = Modifier
@@ -104,7 +106,7 @@ fun AddXtreamScreen(
                 .height(50.dp)
         ) {
             if (uiState.isLoading) {
-                CircularProgressIndicator(color = White, modifier = Modifier.size(24.dp))
+                CircularProgressIndicator(color = VoidBlack, modifier = Modifier.size(24.dp))
             } else {
                 Text("CONNECT", fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }

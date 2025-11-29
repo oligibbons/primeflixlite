@@ -9,35 +9,35 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ProgrammeDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertOrReplace(programme: Programme)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(programmes: List<Programme>)
 
-    @Query("DELETE FROM programmes WHERE playlist_url = :playlistUrl")
-    suspend fun deleteByPlaylistUrl(playlistUrl: String)
-
-    // NEW: Used by Repository to clean up old EPG data
-    @Query("DELETE FROM programmes WHERE `end` < :currentTime")
-    suspend fun deleteOldProgrammes(currentTime: Long)
-
+    // Used by Player & Home for "Now Playing"
     @Query("""
-        SELECT * FROM programmes 
-        WHERE playlist_url = :playlistUrl 
-        AND channel_id = :channelId 
-        AND `end` > :currentTime
-        ORDER BY start ASC
-    """)
-    fun observeProgrammes(playlistUrl: String, channelId: String, currentTime: Long): Flow<List<Programme>>
-
-    // NEW: Used by Player UI for instant lookup (ignores playlistUrl for simplicity)
-    @Query("""
-        SELECT * FROM programmes 
-        WHERE channel_id = :channelId 
-        AND start <= :currentTime 
-        AND `end` > :currentTime
+        SELECT * FROM Programme 
+        WHERE channelId = :channelId 
+        AND start <= :now 
+        AND end > :now 
         LIMIT 1
     """)
-    suspend fun getCurrentProgram(channelId: String, currentTime: Long): Programme?
+    suspend fun getCurrentProgram(channelId: String, now: Long): Programme?
+
+    // NEW: Used by TV Guide to show the schedule
+    // We limit to 24 hours to save memory on the 1GB device
+    @Query("""
+        SELECT * FROM Programme 
+        WHERE channelId = :channelId 
+        AND end > :startTime 
+        AND start < :endTime
+        ORDER BY start ASC
+    """)
+    suspend fun getProgrammesForChannel(channelId: String, startTime: Long, endTime: Long): List<Programme>
+
+    // Clean up: Remove shows that ended > 2 hours ago
+    @Query("DELETE FROM Programme WHERE end < (:now - 7200000)")
+    suspend fun deleteOldProgrammes(now: Long)
+
+    @Query("DELETE FROM Programme WHERE playlistUrl = :playlistUrl")
+    suspend fun deleteByPlaylist(playlistUrl: String)
 }
