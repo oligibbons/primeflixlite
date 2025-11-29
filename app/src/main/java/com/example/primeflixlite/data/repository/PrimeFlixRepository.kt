@@ -21,8 +21,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class PrimeFlixRepository(
+@Singleton
+class PrimeFlixRepository @Inject constructor(
     private val playlistDao: PlaylistDao,
     private val channelDao: ChannelDao,
     private val programmeDao: ProgrammeDao,
@@ -37,20 +40,24 @@ class PrimeFlixRepository(
     val playlists = playlistDao.getAllPlaylists()
 
     suspend fun addPlaylist(title: String, url: String, source: DataSource) {
-        val playlist = Playlist(title = title, url = url, source = source)
-        playlistDao.insert(playlist)
+        // FIX: Store source as String (.value)
+        val playlist = Playlist(title = title, url = url, source = source.value)
+        playlistDao.insertPlaylist(playlist)
         syncPlaylist(playlist)
     }
 
     suspend fun deletePlaylist(playlist: Playlist) = withContext(Dispatchers.IO) {
-        playlistDao.delete(playlist)
+        playlistDao.deletePlaylist(playlist.url)
         channelDao.deleteByPlaylist(playlist.url)
         programmeDao.deleteByPlaylist(playlist.url)
     }
 
     suspend fun syncPlaylist(playlist: Playlist) = withContext(Dispatchers.IO) {
         try {
-            val channels = when (playlist.source) {
+            // FIX: Convert String source back to Enum for logic branching
+            val dataSource = DataSource.of(playlist.source)
+
+            val channels = when (dataSource) {
                 DataSource.Xtream -> fetchXtreamData(playlist)
                 DataSource.M3U -> fetchM3UData(playlist)
                 else -> emptyList()
@@ -60,8 +67,9 @@ class PrimeFlixRepository(
                 channelDao.replacePlaylistChannels(playlist.url, channels)
                 Log.d("PrimeFlixRepo", "Synced ${channels.size} items for ${playlist.title}")
 
-                if (channels.any { it.type == StreamType.LIVE }) {
-                    syncEpg(playlist)
+                // FIX: Check against String name
+                if (channels.any { it.type == StreamType.LIVE.name }) {
+                    syncEpg(playlist, dataSource)
                 }
             }
         } catch (e: Exception) {
@@ -85,7 +93,7 @@ class PrimeFlixRepository(
     }
 
     // --- WATCH HISTORY ---
-    fun getContinueWatching(type: StreamType) = watchProgressDao.getContinueWatching(type)
+    fun getContinueWatching(type: StreamType) = watchProgressDao.getContinueWatching(type.name)
 
     fun getRecentChannels() = watchProgressDao.getRecentChannels()
 
@@ -104,7 +112,6 @@ class PrimeFlixRepository(
     suspend fun getCurrentProgram(channelId: String) =
         programmeDao.getCurrentProgram(channelId, System.currentTimeMillis())
 
-    // CRITICAL: Used by GuideViewModel
     suspend fun getProgrammesForChannel(channelId: String, start: Long, end: Long) =
         programmeDao.getProgrammesForChannel(channelId, start, end)
 
@@ -125,7 +132,7 @@ class PrimeFlixRepository(
                     group = it.categoryId ?: "Uncategorized",
                     url = "${input.basicUrl}/live/${input.username}/${input.password}/${it.streamId}.ts",
                     cover = it.streamIcon,
-                    type = StreamType.LIVE,
+                    type = StreamType.LIVE.name, // FIX: Store as String
                     relationId = it.epgChannelId,
                     streamId = it.streamId.toString()
                 )
@@ -141,7 +148,7 @@ class PrimeFlixRepository(
                     group = "Movies",
                     url = "${input.basicUrl}/movie/${input.username}/${input.password}/${it.streamId}.${it.containerExtension}",
                     cover = it.streamIcon,
-                    type = StreamType.MOVIE,
+                    type = StreamType.MOVIE.name, // FIX: Store as String
                     streamId = it.streamId.toString()
                 )
             })
@@ -156,7 +163,7 @@ class PrimeFlixRepository(
                     group = "Series",
                     url = "",
                     cover = it.cover,
-                    type = StreamType.SERIES,
+                    type = StreamType.SERIES.name, // FIX: Store as String
                     streamId = it.seriesId.toString()
                 )
             })
@@ -177,9 +184,9 @@ class PrimeFlixRepository(
         return items
     }
 
-    private suspend fun syncEpg(playlist: Playlist) {
+    private suspend fun syncEpg(playlist: Playlist, dataSource: DataSource) {
         try {
-            val epgUrl = when(playlist.source) {
+            val epgUrl = when(dataSource) {
                 DataSource.Xtream -> {
                     val input = XtreamInput.decodeFromPlaylistUrl(playlist.url)
                     "${input.basicUrl}/xmltv.php?username=${input.username}&password=${input.password}"

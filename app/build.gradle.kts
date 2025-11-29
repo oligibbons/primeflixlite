@@ -55,10 +55,12 @@ dependencies {
 
     // --- PRIMEFLIX ADDITIONS ---
 
-    // 1. Room Database (STABLE VERSION)
-    implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
-    ksp(libs.androidx.room.compiler)
+    // 1. Room Database (The Memory)
+    // FIX: Downgrade to 2.6.1 Stable to stop compiler recursion crash
+    val room_version = "2.6.1"
+    implementation("androidx.room:room-runtime:$room_version")
+    implementation("androidx.room:room-ktx:$room_version")
+    ksp("androidx.room:room-compiler:$room_version")
 
     // 2. Retrofit (The Networking)
     implementation("com.squareup.retrofit2:retrofit:2.9.0")

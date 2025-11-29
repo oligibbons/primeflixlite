@@ -10,7 +10,8 @@ import androidx.room.PrimaryKey
     tableName = "streams",
     indices = [
         Index(value = ["playlist_url"]),
-        Index(value = ["type"])
+        Index(value = ["type"]),
+        Index(value = ["is_favorite"]) // Optimization for Favorites screen
     ]
 )
 data class Channel(
@@ -33,19 +34,20 @@ data class Channel(
     @ColumnInfo(name = "cover")
     val cover: String? = null,
 
-    // FIX: Store as String to prevent KSP recursion
     @ColumnInfo(name = "type")
-    val type: String = StreamType.LIVE.name,
+    val type: String = "LIVE", // Default string value
 
     @ColumnInfo(name = "relation_id")
     val relationId: String? = null,
 
     @ColumnInfo(name = "stream_id")
-    val streamId: String? = null
+    val streamId: String? = null,
+
+    @ColumnInfo(name = "is_favorite")
+    val isFavorite: Boolean = false
 ) {
     val category: String get() = group
 
-    // Helper to get the Enum when needed
     val streamType: StreamType
         @Ignore get() = try {
             StreamType.valueOf(type)
