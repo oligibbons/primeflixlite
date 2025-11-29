@@ -12,7 +12,13 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.* // Imports ArrowBack, PlayArrow, Pause, SkipNext, SkipPrevious, AspectRatio
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings // Replaced AspectRatio with Settings (Core Icon)
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -72,9 +78,8 @@ fun PlayerOverlay(
                     .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                // Ensure Pause is imported from Icons.Filled
                 Icon(
-                    imageVector = Icons.Filled.Pause,
+                    imageVector = Icons.Default.Pause,
                     contentDescription = null,
                     tint = NeonBlue.copy(alpha = iconAlpha),
                     modifier = Modifier.size(80.dp)
@@ -97,7 +102,7 @@ fun PlayerOverlay(
             ) {
                 // TOP BAR
                 Row(modifier = Modifier.fillMaxWidth().padding(32.dp), verticalAlignment = Alignment.CenterVertically) {
-                    PlayerButton(icon = Icons.Filled.ArrowBack, onClick = onBack)
+                    PlayerButton(icon = Icons.Default.ArrowBack, onClick = onBack)
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
                         Text(text = channel.title, style = MaterialTheme.typography.headlineSmall, color = White, fontWeight = FontWeight.Bold)
@@ -112,8 +117,8 @@ fun PlayerOverlay(
                         }
                     }
                     Spacer(Modifier.weight(1f))
-                    // AspectRatio is standard
-                    PlayerButton(icon = Icons.Filled.AspectRatio, onClick = onResize)
+                    // FIX: Using Settings icon instead of AspectRatio to guarantee compilation without extended library
+                    PlayerButton(icon = Icons.Default.Settings, onClick = onResize)
                 }
 
                 // BOTTOM BAR
@@ -138,17 +143,17 @@ fun PlayerOverlay(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         PlayerButton(
-                            icon = if (channel.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                            icon = if (channel.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
                             onClick = onFavorite,
                             iconColorOverride = if (channel.isFavorite) Color.Red else White
                         )
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            PlayerButton(icon = Icons.Filled.SkipPrevious, onClick = onPrev)
+                            PlayerButton(icon = Icons.Default.SkipPrevious, onClick = onPrev)
                             Spacer(Modifier.width(24.dp))
-                            PlayerButton(icon = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, onClick = onPlayPause, isPrimary = true)
+                            PlayerButton(icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, onClick = onPlayPause, isPrimary = true)
                             Spacer(Modifier.width(24.dp))
-                            PlayerButton(icon = Icons.Filled.SkipNext, onClick = onNext)
+                            PlayerButton(icon = Icons.Default.SkipNext, onClick = onNext)
                         }
 
                         Box(modifier = Modifier.size(48.dp))

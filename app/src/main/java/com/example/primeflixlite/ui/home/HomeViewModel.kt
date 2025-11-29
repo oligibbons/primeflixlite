@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.primeflixlite.data.local.entity.Channel
 import com.example.primeflixlite.data.local.entity.Playlist
 import com.example.primeflixlite.data.local.entity.StreamType
+import com.example.primeflixlite.data.local.entity.WatchProgress // FIX: Added Import
 import com.example.primeflixlite.data.local.model.ChannelWithProgram
 import com.example.primeflixlite.data.repository.PrimeFlixRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -30,14 +31,13 @@ class HomeViewModel @Inject constructor(
 
     init {
         loadPlaylists()
-        observeFavorites() // Start listening for "My List" changes
+        observeFavorites()
     }
 
     private fun loadPlaylists() {
         viewModelScope.launch {
             repository.playlists.collect { playlists ->
                 _uiState.value = _uiState.value.copy(playlists = playlists)
-                // Auto-select first playlist if none selected
                 if (_uiState.value.selectedPlaylist == null && playlists.isNotEmpty()) {
                     selectPlaylist(playlists.first())
                 }
@@ -45,7 +45,6 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    // NEW: Real-time Favorites Sync
     private fun observeFavorites() {
         viewModelScope.launch {
             repository.favorites.collect { favs ->
@@ -82,21 +81,16 @@ class HomeViewModel @Inject constructor(
         filterChannels()
     }
 
-    // Called when returning from Player to update progress bars
     fun refreshContinueWatching() {
         val tab = _uiState.value.selectedTab
         viewModelScope.launch {
             try {
-                // Fetch latest progress from DB
-                // FIX: Added .first() to get the list from the Flow
                 val progressList = repository.getContinueWatching(tab).first()
-                // Map the URLs back to Channel objects
                 val progressChannels = progressList.mapNotNull { progress ->
                     allChannels.find { it.channel.url == progress.channelUrl }?.channel
                 }
                 _uiState.value = _uiState.value.copy(continueWatching = progressChannels)
             } catch (e: Exception) {
-                // Fail silently
                 e.printStackTrace()
             }
         }
@@ -105,26 +99,19 @@ class HomeViewModel @Inject constructor(
     private fun refreshContent() {
         val tab = _uiState.value.selectedTab
 
-        // 1. Filter by Tab (Live, Movie, Series)
-        // FIX: Compare String type to Enum Name
         val tabChannels = allChannels.filter { it.channel.type == tab.name }
 
-        // 2. Extract Categories
         val categories = listOf("All") + tabChannels
             .map { it.channel.group }
             .distinct()
             .sorted()
 
-        // 3. Update State
         _uiState.value = _uiState.value.copy(
             categories = categories,
             isLoading = false
         )
 
-        // 4. Update Continue Watching for this tab
         refreshContinueWatching()
-
-        // 5. Apply Category Filter
         filterChannels()
     }
 
@@ -133,7 +120,6 @@ class HomeViewModel @Inject constructor(
         val category = _uiState.value.selectedCategory
 
         val filtered = allChannels.filter { item ->
-            // FIX: Compare String type to Enum Name
             item.channel.type == tab.name &&
                     (category == "All" || item.channel.group == category)
         }
@@ -145,6 +131,5 @@ class HomeViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(selectedPlaylist = null)
     }
 
-    // Deprecated: UI now uses AddXtreamScreen, keeping stub to prevent compilation error if referenced
     fun addSamplePlaylist() {}
 }

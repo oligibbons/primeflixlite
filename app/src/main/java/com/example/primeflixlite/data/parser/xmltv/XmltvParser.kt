@@ -103,10 +103,10 @@ class XmltvParser(
     }
 
     private fun parseDate(dateStr: String?): Long? {
-        // FIX: Explicit null check before passing to parse
         if (dateStr == null) return null
         return try {
-            dateFormat.parse(dateStr)?.time
+            // FIX: Assert non-null !! because we checked it above
+            dateFormat.parse(dateStr!!)?.time
         } catch (e: Exception) {
             null
         }

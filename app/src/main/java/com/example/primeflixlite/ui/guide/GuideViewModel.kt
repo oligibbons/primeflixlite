@@ -38,18 +38,16 @@ class GuideViewModel @Inject constructor(
     private fun loadGuide() {
         viewModelScope.launch {
             repository.playlists.collectLatest { playlists ->
-                // Just grab first active playlist for Lite version demo
                 val activePlaylist = playlists.firstOrNull()
                 if (activePlaylist != null) {
                     repository.getChannelsWithEpg(activePlaylist.url).collect { channelsWithEpg ->
                         val items = channelsWithEpg
-                            // FIX: Compare String vs String (.name)
                             .filter { it.channel.type == StreamType.LIVE.name }
                             .map {
                                 GuideItem(
                                     channel = it.channel,
-                                    programs = it.currentProgram?.let { p -> listOf(p) } ?: emptyList()
-                                    // Note: In a full app we'd fetch range of programs, here just current
+                                    // FIX: Changed .currentProgram to .program based on the data class
+                                    programs = it.program?.let { p -> listOf(p) } ?: emptyList()
                                 )
                             }
 
