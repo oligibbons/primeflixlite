@@ -13,31 +13,31 @@ interface ProgrammeDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(programmes: List<Programme>)
 
-    // Used by Player & Home for "Now Playing"
+    // FIX: Table "programmes", Column "channel_id", Quoted `end`
     @Query("""
-        SELECT * FROM Programme 
-        WHERE channelId = :channelId 
+        SELECT * FROM programmes 
+        WHERE channel_id = :channelId 
         AND start <= :now 
-        AND end > :now 
+        AND `end` > :now 
         LIMIT 1
     """)
     suspend fun getCurrentProgram(channelId: String, now: Long): Programme?
 
-    // NEW: Used by TV Guide to show the schedule
-    // We limit to 24 hours to save memory on the 1GB device
+    // FIX: Table "programmes", Columns "channel_id", Quoted `end`
     @Query("""
-        SELECT * FROM Programme 
-        WHERE channelId = :channelId 
-        AND end > :startTime 
+        SELECT * FROM programmes 
+        WHERE channel_id = :channelId 
+        AND `end` > :startTime 
         AND start < :endTime
         ORDER BY start ASC
     """)
     suspend fun getProgrammesForChannel(channelId: String, startTime: Long, endTime: Long): List<Programme>
 
-    // Clean up: Remove shows that ended > 2 hours ago
-    @Query("DELETE FROM Programme WHERE end < (:now - 7200000)")
+    // FIX: Table "programmes", Quoted `end`
+    @Query("DELETE FROM programmes WHERE `end` < (:now - 7200000)")
     suspend fun deleteOldProgrammes(now: Long)
 
-    @Query("DELETE FROM Programme WHERE playlistUrl = :playlistUrl")
+    // FIX: Table "programmes", Column "playlist_url"
+    @Query("DELETE FROM programmes WHERE playlist_url = :playlistUrl")
     suspend fun deleteByPlaylist(playlistUrl: String)
 }
