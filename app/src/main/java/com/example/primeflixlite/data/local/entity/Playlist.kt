@@ -41,6 +41,7 @@ data class Playlist(
 ) {
     companion object {
         const val URL_IMPORTED = "imported"
+        // Ensure these reference the DataSource class (which is now in its own file)
         val SERIES_TYPES = arrayOf(DataSource.Xtream.TYPE_SERIES)
         val VOD_TYPES = arrayOf(DataSource.Xtream.TYPE_VOD)
     }
