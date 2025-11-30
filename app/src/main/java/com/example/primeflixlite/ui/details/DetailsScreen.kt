@@ -1,6 +1,7 @@
 package com.example.primeflixlite.ui.details
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,9 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -35,10 +34,7 @@ import coil.request.ImageRequest
 import com.example.primeflixlite.data.local.entity.Channel
 import com.example.primeflixlite.data.local.entity.StreamType
 import com.example.primeflixlite.data.parser.xtream.XtreamChannelInfo
-import com.example.primeflixlite.ui.theme.BurntYellow
-import com.example.primeflixlite.ui.theme.NeonBlue
-import com.example.primeflixlite.ui.theme.VoidBlack
-import com.example.primeflixlite.ui.theme.White
+import com.example.primeflixlite.ui.theme.*
 
 @Composable
 fun DetailsScreen(
@@ -49,10 +45,9 @@ fun DetailsScreen(
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val liveChannel by viewModel.currentChannel.collectAsState()
-    val displayChannel = liveChannel ?: channel
-    val context = LocalContext.current
     val meta = uiState.metadata
+    val displayChannel = viewModel.currentChannel.collectAsState().value ?: channel
+    val context = LocalContext.current
 
     LaunchedEffect(channel) {
         viewModel.loadContent(channel)
@@ -60,143 +55,119 @@ fun DetailsScreen(
 
     BackHandler { onBack() }
 
-    val backdropGradient = remember {
-        Brush.verticalGradient(
-            colors = listOf(Color.Transparent, VoidBlack),
-            startY = 0f,
-            endY = Float.POSITIVE_INFINITY
-        )
-    }
-
-    // Prefer TMDB Backdrop, fallback to IPTV cover
-    val backdropUrl = meta?.backdropPath?.let { "https://image.tmdb.org/t/p/w1280$it" }
-        ?: displayChannel.cover
-
-    val backdropRequest = remember(backdropUrl) {
-        ImageRequest.Builder(context)
-            .data(backdropUrl)
-            .size(1280, 720)
-            .crossfade(true)
-            .build()
-    }
-
-    // Prefer TMDB Poster, fallback to IPTV cover
-    val posterUrl = meta?.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" }
-        ?: displayChannel.cover
-
-    val posterRequest = remember(posterUrl) {
-        ImageRequest.Builder(context)
-            .data(posterUrl)
-            .size(400, 600)
-            .build()
-    }
-
+    // --- 1. BACKGROUND LAYER ---
     Box(modifier = Modifier.fillMaxSize().background(VoidBlack)) {
-        // --- BACKGROUND ---
+        val backdropUrl = meta?.backdropPath?.let { "https://image.tmdb.org/t/p/w1280$it" }
+            ?: displayChannel.cover
+
         if (!backdropUrl.isNullOrEmpty()) {
             AsyncImage(
-                model = backdropRequest,
+                model = ImageRequest.Builder(context)
+                    .data(backdropUrl)
+                    .size(1280, 720)
+                    .crossfade(true)
+                    .build(),
                 imageLoader = imageLoader,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(500.dp) // Taller backdrop
-                    .alpha(0.5f)    // Dimmed
-                    .drawWithContent {
-                        drawContent()
-                        drawRect(brush = backdropGradient)
-                    }
+                    .fillMaxSize()
+                    .alpha(0.3f) // Darkened for readability
+            )
+            // Gradient Overlay (Top to Bottom)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, VoidBlack),
+                            startY = 0f,
+                            endY = 800f
+                        )
+                    )
             )
         }
 
-        // --- CONTENT ---
-        Row(modifier = Modifier.fillMaxSize().padding(40.dp)) {
+        // --- 2. CONTENT LAYER ---
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(48.dp)
+        ) {
+            // LEFT: POSTER
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(12.dp),
+                modifier = Modifier.width(300.dp).aspectRatio(2f/3f)
+            ) {
+                val posterUrl = meta?.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" }
+                    ?: displayChannel.cover
 
-            // LEFT COLUMN: POSTER
-            Column(modifier = Modifier.width(280.dp)) {
-                Card(
-                    shape = RoundedCornerShape(12.dp),
-                    elevation = CardDefaults.cardElevation(8.dp),
-                    modifier = Modifier.aspectRatio(2f/3f)
-                ) {
-                    if (!posterUrl.isNullOrEmpty()) {
-                        AsyncImage(
-                            model = posterRequest,
-                            imageLoader = imageLoader,
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Box(Modifier.fillMaxSize().background(Color.DarkGray))
-                    }
+                if (!posterUrl.isNullOrEmpty()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context).data(posterUrl).size(400, 600).build(),
+                        imageLoader = imageLoader,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Box(Modifier.fillMaxSize().background(OffBlack))
                 }
             }
 
-            Spacer(modifier = Modifier.width(32.dp))
+            Spacer(Modifier.width(48.dp))
 
-            // RIGHT COLUMN: INFO & ACTIONS
-            Column(modifier = Modifier.fillMaxSize()) {
+            // RIGHT: INFO & CONTROLS
+            Column(modifier = Modifier.weight(1f)) {
 
-                // 1. TITLE
+                // Title
                 Text(
-                    text = meta?.title ?: displayChannel.canonicalTitle ?: displayChannel.title,
-                    style = MaterialTheme.typography.displaySmall,
+                    text = meta?.title ?: displayChannel.title,
+                    style = MaterialTheme.typography.displayMedium,
                     color = White,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // 2. BADGES (Rating, Genres, Year)
+                // Meta Row (Year | Genre | Rating)
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.padding(vertical = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (meta?.voteAverage != null && meta.voteAverage > 0.0) {
-                        Badge(text = "★ ${String.format("%.1f", meta.voteAverage)}", color = BurntYellow)
+                    if (meta?.voteAverage != null && meta.voteAverage > 0) {
+                        Badge(text = "★ ${String.format("%.1f", meta.voteAverage)}", color = NeonYellow)
                     }
-                    meta?.genres?.let {
-                        if (it.isNotEmpty()) Text(text = it, color = Color.LightGray, fontSize = 14.sp)
+                    if (!meta?.genres.isNullOrEmpty()) {
+                        Text(text = meta!!.genres, color = LightGray, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                // Description
+                Text(
+                    text = meta?.overview ?: "No description available.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = LightGray,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(bottom = 32.dp)
+                )
 
-                // 3. ACTIONS (Versions or Series Logic)
-                if (displayChannel.type == StreamType.MOVIE.name) {
+                // ACTIONS ROW
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // Primary Play Button
+                    val playUrl = if (uiState.versions.isNotEmpty()) uiState.versions.first().url else displayChannel.url
+                    NeonButton(
+                        text = "PLAY MOVIE",
+                        icon = Icons.Default.PlayArrow,
+                        isPrimary = true,
+                        onClick = { onPlayClick(playUrl) }
+                    )
 
-                    // MOVIE: Show Versions (4K, 1080p)
-                    Text("Select Version:", color = Color.Gray, fontSize = 12.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    if (uiState.versions.isNotEmpty()) {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            items(uiState.versions) { version ->
-                                PlayButton(
-                                    onClick = { onPlayClick(version.url) },
-                                    label = if (version.quality.isNotEmpty()) version.quality else "PLAY",
-                                    isHighlight = version.quality.contains("4K", true)
-                                )
-                            }
-                        }
-                    } else {
-                        // Fallback if versions list empty (rare)
-                        PlayButton(
-                            onClick = { onPlayClick(displayChannel.url) },
-                            label = "PLAY MOVIE"
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                } else if (displayChannel.type == StreamType.SERIES.name) {
-
-                    // SERIES: Episodes Logic
-                    if (uiState.isLoading) {
-                        CircularProgressIndicator(color = NeonBlue)
-                    } else if (uiState.episodes.isNotEmpty()) {
+                    // Series Season Selector (if applicable)
+                    if (displayChannel.type == StreamType.SERIES.name && uiState.episodes.isNotEmpty()) {
                         val seasons = viewModel.getSeasons()
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(seasons) { seasonNum ->
@@ -211,54 +182,29 @@ fun DetailsScreen(
                                 )
                             }
                         }
-
-                        // We put the episode list in a Box with weight so it scrolls properly
-                        // inside this Column, separate from the Plot/Cast below
-                        Spacer(modifier = Modifier.height(16.dp))
                     }
                 }
 
-                // 4. PLOT & CAST (Scrollable container for text)
-                Column(modifier = Modifier.weight(1f).focusable(false)) {
-                    if (meta?.overview != null) {
-                        Text(
-                            text = meta.overview,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFFDDDDDD),
-                            maxLines = 6,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
+                // EPISODE LIST (For Series)
+                if (displayChannel.type == StreamType.SERIES.name) {
+                    Spacer(Modifier.height(24.dp))
+                    Text("EPISODES", color = NeonBlue, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(12.dp))
 
-                    if (meta?.castPreview != null) {
-                        Text(
-                            text = "Cast: ${meta.castPreview}",
-                            color = Color.Gray,
-                            fontSize = 14.sp
-                        )
-                    }
-
-                    // If Series, list episodes here (taking remaining space)
-                    if (displayChannel.type == StreamType.SERIES.name && uiState.episodes.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(24.dp))
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            contentPadding = PaddingValues(bottom = 32.dp)
-                        ) {
-                            items(
-                                items = viewModel.getEpisodesForSeason(viewModel.selectedSeason),
-                                key = { it.id ?: it.hashCode() }
-                            ) { episode ->
-                                EpisodeRow(
-                                    episode = episode,
-                                    onClick = {
-                                        val ext = episode.containerExtension ?: "mkv"
-                                        val url = "${displayChannel.url.substringBefore("/series/")}/series/${displayChannel.url.split("/")[4]}/${displayChannel.url.split("/")[5]}/${episode.id}.$ext"
-                                        onPlayClick(url)
-                                    }
-                                )
-                            }
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(bottom = 24.dp)
+                    ) {
+                        items(viewModel.getEpisodesForSeason(viewModel.selectedSeason)) { episode ->
+                            EpisodeRow(
+                                episode = episode,
+                                onClick = {
+                                    // Construct URL logic here same as before
+                                    val ext = episode.containerExtension ?: "mkv"
+                                    val url = "${displayChannel.url.substringBefore("/series/")}/series/${displayChannel.url.split("/")[4]}/${displayChannel.url.split("/")[5]}/${episode.id}.$ext"
+                                    onPlayClick(url)
+                                }
+                            )
                         }
                     }
                 }
@@ -268,73 +214,75 @@ fun DetailsScreen(
 }
 
 @Composable
-fun PlayButton(onClick: () -> Unit, label: String, isHighlight: Boolean = false) {
+fun NeonButton(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    isPrimary: Boolean = false,
+    onClick: () -> Unit
+) {
     var isFocused by remember { mutableStateOf(false) }
-
-    // Only request focus initially if it's the first button (simplification)
-    // In a real grid, you'd manage focusRequester refs more carefully.
 
     Button(
         onClick = onClick,
         colors = ButtonDefaults.buttonColors(
-            containerColor = if (isHighlight) NeonBlue else BurntYellow
+            containerColor = if (isFocused) White else if (isPrimary) NeonYellow else OffBlack,
+            contentColor = if (isFocused) VoidBlack else if (isPrimary) VoidBlack else White
         ),
+        shape = RoundedCornerShape(8.dp),
         modifier = Modifier
-            .height(50.dp)
+            .height(48.dp)
             .onFocusChanged { isFocused = it.isFocused }
+            .scale(if (isFocused) 1.05f else 1f)
             .border(
-                if(isFocused) 3.dp else 0.dp,
-                if(isFocused) White else Color.Transparent,
-                RoundedCornerShape(25.dp)
+                width = if (!isPrimary && !isFocused) 2.dp else 0.dp,
+                color = if (!isPrimary && !isFocused) Color.Gray else Color.Transparent,
+                shape = RoundedCornerShape(8.dp)
             )
     ) {
-        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = VoidBlack)
-        Spacer(Modifier.width(8.dp))
-        Text(text = label, color = VoidBlack, fontWeight = FontWeight.Bold)
+        if (icon != null) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+        }
+        Text(text = text, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
 fun EpisodeRow(episode: XtreamChannelInfo.Episode, onClick: () -> Unit) {
     var isFocused by remember { mutableStateOf(false) }
-    val bgColor = if (isFocused) Color(0xFF333333) else Color(0xFF1A1A1A)
-    val borderColor = if (isFocused) NeonBlue else Color.Transparent
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(bgColor)
-            .border(2.dp, borderColor, RoundedCornerShape(8.dp))
+            .background(if (isFocused) White else OffBlack)
             .clickable { onClick() }
             .onFocusChanged { isFocused = it.isFocused }
-            .focusable()
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = "${episode.episodeNum}",
-            color = NeonBlue,
+            color = if (isFocused) VoidBlack else NeonBlue,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.width(40.dp)
         )
-        Text(text = episode.title ?: "Episode ${episode.episodeNum}", color = White)
+        Text(
+            text = episode.title ?: "Episode ${episode.episodeNum}",
+            color = if (isFocused) VoidBlack else White,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
 @Composable
 fun Badge(text: String, color: Color) {
-    Surface(
-        color = color.copy(alpha = 0.2f),
-        shape = RoundedCornerShape(4.dp),
-        modifier = Modifier.padding(end = 8.dp)
+    Box(
+        modifier = Modifier
+            .border(1.dp, color, RoundedCornerShape(4.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
-        Text(
-            text = text,
-            color = color,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold
-        )
+        Text(text = text, color = color, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
     }
 }

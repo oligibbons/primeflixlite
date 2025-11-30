@@ -1,4 +1,3 @@
-// file: app/src/main/java/com/example/primeflixlite/data/local/dao/ChannelDao.kt
 package com.example.primeflixlite.data.local.dao
 
 import androidx.room.Dao
@@ -20,6 +19,14 @@ interface ChannelDao {
     @Query("SELECT * FROM streams WHERE id = :id LIMIT 1")
     suspend fun getChannelById(id: Long): Channel?
 
+    // [NEW] Required for Player Context (Finding the channel metadata from a raw URL)
+    @Query("SELECT * FROM streams WHERE url = :url LIMIT 1")
+    suspend fun getChannelByUrl(url: String): Channel?
+
+    // [NEW] Required for Channel Drawer (Finding neighbors in the same group)
+    @Query("SELECT * FROM streams WHERE playlist_url = :playlistUrl AND `group` = :group ORDER BY title ASC")
+    suspend fun getChannelsByGroup(playlistUrl: String, group: String): List<Channel>
+
     @Query("""
         SELECT * FROM streams 
         WHERE title LIKE '%' || :query || '%' 
@@ -40,7 +47,7 @@ interface ChannelDao {
     @Query("SELECT DISTINCT `group` FROM streams WHERE playlist_url = :url AND type = :type ORDER BY `group` ASC")
     fun getGroups(url: String, type: String): Flow<List<String>>
 
-    // 2. LIVE TV: Fetches Channels + EPG (Joined) - YOUR OPTIMIZED QUERY
+    // 2. LIVE TV: Fetches Channels + EPG (Joined)
     @Transaction
     @Query("""
         SELECT c.*, 
@@ -72,10 +79,9 @@ interface ChannelDao {
     """)
     fun getVodChannels(url: String, type: String, group: String): Flow<List<Channel>>
 
-    // --- NEW: SMART DEDUPLICATION & METADATA ---
+    // --- SMART DEDUPLICATION & METADATA ---
 
     // 4. Smart VOD: Returns UNIQUE movies (grouped by canonical_title)
-    // Used for the main browsing list to hide duplicates
     @Query("""
         SELECT * FROM streams 
         WHERE playlist_url = :url 
@@ -96,7 +102,7 @@ interface ChannelDao {
     """)
     suspend fun getVersions(url: String, type: String, canonicalTitle: String): List<Channel>
 
-    // 6. Recently Added: Global list sorted by ID (assuming newer ID = newer import)
+    // 6. Recently Added: Global list sorted by ID
     @Query("SELECT * FROM streams WHERE playlist_url = :url AND type = :type ORDER BY id DESC LIMIT 20")
     fun getRecentlyAdded(url: String, type: String): Flow<List<Channel>>
 

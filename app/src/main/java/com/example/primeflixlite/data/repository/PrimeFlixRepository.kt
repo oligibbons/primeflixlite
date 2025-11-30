@@ -12,7 +12,7 @@ import com.example.primeflixlite.data.parser.xmltv.XmltvParser
 import com.example.primeflixlite.data.parser.xtream.XtreamInput
 import com.example.primeflixlite.data.parser.xtream.XtreamParser
 import com.example.primeflixlite.util.FeedbackManager
-import com.example.primeflixlite.util.TitleNormalizer // [New] Import
+import com.example.primeflixlite.util.TitleNormalizer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -30,8 +30,8 @@ class PrimeFlixRepository @Inject constructor(
     private val channelDao: ChannelDao,
     private val programmeDao: ProgrammeDao,
     private val watchProgressDao: WatchProgressDao,
-    private val mediaMetadataDao: MediaMetadataDao, // [New]
-    private val metadataRepository: MetadataRepository, // [New]
+    private val mediaMetadataDao: MediaMetadataDao,
+    private val metadataRepository: MetadataRepository,
     private val xtreamParser: XtreamParser,
     private val m3uParser: M3UParser,
     private val xmltvParser: XmltvParser,
@@ -41,6 +41,8 @@ class PrimeFlixRepository @Inject constructor(
 ) {
 
     val playlists = playlistDao.getAllPlaylists()
+
+    // --- PLAYLIST MANAGEMENT ---
 
     fun addPlaylist(title: String, url: String, source: DataSource) {
         externalScope.launch {
@@ -94,11 +96,12 @@ class PrimeFlixRepository @Inject constructor(
         }
     }
 
+    // --- SYNC LOGIC (XTREAM) ---
     private suspend fun syncXtreamStaged(playlist: Playlist): Boolean {
         val input = XtreamInput.decodeFromPlaylistUrl(playlist.url)
         var totalSaved = 0
 
-        // 1. Live Channels (Generally don't need normalization)
+        // 1. Live Channels
         try {
             feedbackManager.showLoading("Downloading...", "Live Channels")
             val liveItems = xtreamParser.getLiveStreams(input)
@@ -114,7 +117,7 @@ class PrimeFlixRepository @Inject constructor(
                         type = StreamType.LIVE.name,
                         relationId = it.epgChannelId,
                         streamId = it.streamId.toString(),
-                        canonicalTitle = it.name.orEmpty() // Fallback
+                        canonicalTitle = it.name.orEmpty()
                     )
                 }
                 saveBatch(channels, "Live TV")
@@ -124,24 +127,20 @@ class PrimeFlixRepository @Inject constructor(
             Log.w("PrimeFlixRepo", "Xtream Live Failed", e)
         }
 
-        // 2. Movies (Apply Title Normalizer for Deduplication)
+        // 2. Movies
         try {
             feedbackManager.showLoading("Downloading...", "Movies")
             val vodItems = xtreamParser.getVodStreams(input)
 
             if (vodItems.isNotEmpty()) {
                 val channels = vodItems.map {
-                    // [New] Clean title and extract quality
                     val info = TitleNormalizer.parse(it.name ?: "")
-
                     Channel(
                         playlistUrl = playlist.url,
                         title = it.name.orEmpty(),
-                        // [New] Store Normalized Data
                         canonicalTitle = info.normalizedTitle,
                         quality = info.quality,
-                        // ------------------------
-                        group = "Movies", // Could map category_id if available
+                        group = "Movies",
                         url = "${input.basicUrl}/movie/${input.username}/${input.password}/${it.streamId}.${it.containerExtension}",
                         cover = it.streamIcon,
                         type = StreamType.MOVIE.name,
@@ -155,7 +154,7 @@ class PrimeFlixRepository @Inject constructor(
             Log.w("PrimeFlixRepo", "Xtream VOD Failed", e)
         }
 
-        // 3. Series (Apply Title Normalizer)
+        // 3. Series
         try {
             feedbackManager.showLoading("Downloading...", "Series")
             val seriesItems = xtreamParser.getSeries(input)
@@ -166,7 +165,7 @@ class PrimeFlixRepository @Inject constructor(
                     Channel(
                         playlistUrl = playlist.url,
                         title = it.name.orEmpty(),
-                        canonicalTitle = info.normalizedTitle, // [New]
+                        canonicalTitle = info.normalizedTitle,
                         group = "Series",
                         url = "",
                         cover = it.cover,
@@ -186,14 +185,11 @@ class PrimeFlixRepository @Inject constructor(
 
     private suspend fun saveBatch(channels: List<Channel>, label: String) {
         if (channels.isEmpty()) return
-
         val batchSize = 1000
         val chunks = channels.chunked(batchSize)
         val total = channels.size
         var current = 0
-
         feedbackManager.showLoading("Saving...", label)
-
         database.withTransaction {
             chunks.forEach { batch ->
                 channelDao.insertAll(batch)
@@ -203,18 +199,15 @@ class PrimeFlixRepository @Inject constructor(
         }
     }
 
+    // --- SYNC LOGIC (M3U & EPG) ---
     private suspend fun syncM3U(playlist: Playlist): Boolean {
         feedbackManager.showLoading("Downloading...", "M3U Playlist")
         try {
             val request = okhttp3.Request.Builder().url(playlist.url).build()
             val response = okHttpClient.newCall(request).execute()
             val inputStream = response.body?.byteStream() ?: return false
-
             val items = mutableListOf<Channel>()
-            m3uParser.parse(inputStream).collect { m3u ->
-                items.add(m3u.toChannel(playlist.url))
-            }
-
+            m3uParser.parse(inputStream).collect { m3u -> items.add(m3u.toChannel(playlist.url)) }
             if (items.isNotEmpty()) {
                 saveBatch(items, "Channels")
                 return true
@@ -237,11 +230,9 @@ class PrimeFlixRepository @Inject constructor(
                 }
                 else -> null
             }
-
             if (epgUrl != null) {
                 feedbackManager.showLoading("Updating Guide...", "EPG")
                 programmeDao.deleteOldProgrammes(System.currentTimeMillis())
-
                 xmltvParser.parse(epgUrl).collect { batch ->
                     val validBatch = batch.map { it.copy(playlistUrl = playlist.url) }
                     programmeDao.insertAll(validBatch)
@@ -252,39 +243,35 @@ class PrimeFlixRepository @Inject constructor(
         }
     }
 
-    // --- Accessors ---
+    // --- DATA ACCESSORS (UI) ---
 
-    // Unified Browsing Accessor: Smartly switches between Raw Live and Deduplicated VOD
-    fun getBrowsingContent(
-        playlistUrl: String,
-        type: StreamType,
-        group: String
-    ): Flow<List<ChannelWithProgram>> {
+    // 1. Browsing Content
+    fun getBrowsingContent(playlistUrl: String, type: StreamType, group: String): Flow<List<ChannelWithProgram>> {
         return if (type == StreamType.LIVE) {
-            // Existing optimized EPG Join
             channelDao.getLiveChannels(playlistUrl, group, System.currentTimeMillis())
         } else {
-            // [New] Deduplicated query for VOD
             channelDao.getDistinctCanonicalMovies(playlistUrl, type.name, group)
-                .map { channels ->
-                    channels.map { ChannelWithProgram(it, null) }
-                }
+                .map { channels -> channels.map { ChannelWithProgram(it, null) } }
         }
     }
 
-    // [New] Smart Category: Recently Added
-    fun getRecentAdded(playlistUrl: String, type: StreamType) =
-        channelDao.getRecentlyAdded(playlistUrl, type.name)
+    // 2. Recent Added
+    fun getRecentAdded(playlistUrl: String, type: StreamType) = channelDao.getRecentlyAdded(playlistUrl, type.name)
 
-    // [New] For Details Page: Get all versions (4K, 1080p)
+    // 3. Player Support (Context)
+    suspend fun getChannelByUrl(url: String) = channelDao.getChannelByUrl(url)
+
+    // Used by PlayerViewModel to populate the drawer
+    suspend fun getChannelsByCategory(playlistUrl: String, category: String) = channelDao.getChannelsByGroup(playlistUrl, category)
+
+    // 4. Details Support
     suspend fun getVersions(playlistUrl: String, type: StreamType, canonicalTitle: String) =
         channelDao.getVersions(playlistUrl, type.name, canonicalTitle)
 
-    // [New] Fetch Metadata on demand
     suspend fun getMetadata(title: String, type: String) =
         metadataRepository.getOrFetchMetadata(title, type)
 
-    // --- Existing Accessors (Preserved) ---
+    // --- GENERIC ---
     fun getChannels(playlistUrl: String) = channelDao.getChannelsByPlaylist(playlistUrl)
     fun searchChannels(query: String) = channelDao.searchChannels(query)
     val favorites = channelDao.getFavorites()
@@ -307,11 +294,10 @@ class PrimeFlixRepository @Inject constructor(
         )
     }
 
+    // --- EPG / SERIES ---
     suspend fun getCurrentProgram(id: String) = programmeDao.getCurrentProgram(id, System.currentTimeMillis())
     suspend fun getProgrammesForChannel(id: String, start: Long, end: Long) = programmeDao.getProgrammesForChannel(id, start, end)
     suspend fun getSeriesEpisodes(url: String, id: Int) = xtreamParser.getSeriesEpisodes(XtreamInput.decodeFromPlaylistUrl(url), id)
 
     fun getGroups(url: String, type: String) = channelDao.getGroups(url, type)
-    fun getLiveChannels(url: String, group: String) = channelDao.getLiveChannels(url, group, System.currentTimeMillis())
-    fun getVodChannels(playlistUrl: String, type: String, group: String) = channelDao.getVodChannels(playlistUrl, type, group)
 }
