@@ -12,7 +12,7 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -60,7 +60,6 @@ fun PlayerOverlay(
         }
     }
 
-    // PERFORMANCE: Hoist gradient
     val overlayGradient = remember {
         Brush.verticalGradient(
             colors = listOf(Color.Black.copy(alpha = 0.8f), Color.Transparent, Color.Black.copy(alpha = 0.9f))
@@ -107,7 +106,8 @@ fun PlayerOverlay(
             ) {
                 // TOP BAR
                 Row(modifier = Modifier.fillMaxWidth().padding(32.dp), verticalAlignment = Alignment.CenterVertically) {
-                    PlayerButton(icon = Icons.Default.ArrowBack, onClick = onBack)
+                    // FIXED: Use AutoMirrored ArrowBack
+                    PlayerButton(icon = Icons.AutoMirrored.Filled.ArrowBack, onClick = onBack)
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
                         Text(text = channel.title, style = MaterialTheme.typography.headlineSmall, color = White, fontWeight = FontWeight.Bold)

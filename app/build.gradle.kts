@@ -1,11 +1,11 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android) // Fixed: Was libs.plugins.jetbrains...
-    alias(libs.plugins.kotlin.compose) // Added: Defined in your TOML
-    alias(libs.plugins.kotlin.serialization) // Fixed: Uses TOML version
-    alias(libs.plugins.ksp) // Fixed: Uses TOML version
-    alias(libs.plugins.hilt.android) // Fixed: Uses TOML version
-    id("kotlin-kapt") // Required for Hilt (until full KSP migration)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.hilt.android)
+    id("kotlin-kapt")
 }
 
 android {
@@ -55,7 +55,6 @@ android {
 }
 
 dependencies {
-
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -64,14 +63,13 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    // Extended Icons for 'Pause', 'PlayArrow'
     implementation(libs.androidx.compose.material.icons.extended)
 
-    // TV Compose (Not in TOML yet, keeping hardcoded)
+    // TV Compose
     implementation("androidx.tv:tv-foundation:1.0.0-alpha10")
     implementation("androidx.tv:tv-material:1.0.0-alpha10")
 
-    // Coil (Not in TOML yet, keeping hardcoded)
+    // Coil
     implementation("io.coil-kt:coil-compose:2.6.0")
 
     // Room
@@ -84,15 +82,18 @@ dependencies {
     kapt(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
 
-    // Networking (Retrofit & OkHttp)
-    // You haven't added these to TOML yet, so we keep them hardcoded for now
-    // to avoid "Unresolved reference" errors.
+    // Networking
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // Serialization & Converters
+    // Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
     implementation("com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter:1.0.0")
+
+    // Media3 (ExoPlayer) - ADDED TO FIX BUILD ERRORS
+    implementation("androidx.media3:media3-exoplayer:1.3.0")
+    implementation("androidx.media3:media3-ui:1.3.0")
+    implementation("androidx.media3:media3-common:1.3.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

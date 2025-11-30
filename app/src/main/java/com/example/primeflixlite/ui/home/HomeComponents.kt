@@ -18,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -30,7 +29,6 @@ import com.example.primeflixlite.data.local.entity.Channel
 import com.example.primeflixlite.ui.theme.NeonBlue
 import com.example.primeflixlite.ui.theme.White
 
-// Hoist shape
 private val CardShape = RoundedCornerShape(8.dp)
 
 @Composable
@@ -79,7 +77,7 @@ fun ContinueWatchingCard(
     val imageRequest = remember(channel.cover) {
         ImageRequest.Builder(context)
             .data(channel.cover)
-            .size(300, 165) // Approx 200dp width * 1.5 density ratio
+            .size(300, 165)
             .crossfade(false)
             .build()
     }
@@ -111,8 +109,9 @@ fun ContinueWatchingCard(
             }
         }
 
+        // FIXED: Use lambda for progress to silence deprecation warning
         LinearProgressIndicator(
-            progress = 0.5f,
+            progress = { 0.5f },
             modifier = Modifier.fillMaxWidth().height(4.dp),
             color = NeonBlue,
             trackColor = Color.DarkGray

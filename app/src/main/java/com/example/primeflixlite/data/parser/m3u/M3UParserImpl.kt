@@ -35,9 +35,16 @@ class M3UParserImpl @Inject constructor() : M3UParser {
                     l.substringAfter("tvg-id=\"").substringBefore("\"")
                 } else null
 
-                currentData = M3UData(title, group, logo, "", id)
+                // FIXED: Used named arguments to avoid Type Mismatch (String passed to Long)
+                currentData = M3UData(
+                    title = title,
+                    group = group,
+                    logo = logo,
+                    url = "",
+                    tvgId = id
+                )
             } else if (!l.startsWith("#") && l.isNotEmpty() && currentData != null) {
-                emit(currentData.copy(url = l))
+                emit(currentData!!.copy(url = l))
                 currentData = null
             }
         }
@@ -50,7 +57,9 @@ fun M3UData.toChannel(playlistUrl: String): Channel {
     val generatedId = this.url.hashCode().toString()
 
     // Use Normalizer to fill new metadata fields (Canonical Title, Quality)
-    val info = TitleNormalizer.parse(this.title)
+    // FIXED: 'this.title' is now valid after renaming 'name' to 'title' in M3UData
+    val rawTitle = this.title ?: "Unknown Channel"
+    val info = TitleNormalizer.parse(rawTitle)
 
     // Guess type based on URL extension or path
     val type = if (this.url.endsWith(".m3u8") || this.url.contains("/live/")) {
@@ -63,11 +72,11 @@ fun M3UData.toChannel(playlistUrl: String): Channel {
 
     return Channel(
         playlistUrl = playlistUrl,
-        streamId = generatedId, // REQUIRED: Fixes "No value passed" error
-        title = this.title,
-        canonicalTitle = info.normalizedTitle, // NEW: For deduplication
-        quality = info.quality, // NEW: For version selection
-        group = this.group,
+        streamId = generatedId,
+        title = rawTitle,
+        canonicalTitle = info.normalizedTitle,
+        quality = info.quality,
+        group = this.group ?: "Uncategorized",
         url = this.url,
         cover = this.logo,
         type = type.name,

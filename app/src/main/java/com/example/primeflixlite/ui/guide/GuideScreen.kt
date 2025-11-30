@@ -1,7 +1,6 @@
 package com.example.primeflixlite.ui.guide
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,8 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,7 +25,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.primeflixlite.data.local.entity.Channel
@@ -49,7 +46,6 @@ fun GuideScreen(
 
     BackHandler { onBack() }
 
-    // Auto-focus list when loaded
     LaunchedEffect(uiState.isLoading) {
         if (!uiState.isLoading && uiState.channels.isNotEmpty()) {
             listFocusRequester.requestFocus()
@@ -67,18 +63,14 @@ fun GuideScreen(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(bottom = 24.dp)
         ) {
-            Icon(Icons.Default.List, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(32.dp))
+            // FIXED: Use AutoMirrored icon
+            Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(32.dp))
             Spacer(Modifier.width(16.dp))
             Text("TV Guide", style = MaterialTheme.typography.headlineMedium, color = White, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
             Text(TimeUtils.getCurrentTimeFormatted(), color = Color.Gray, style = MaterialTheme.typography.titleMedium)
         }
 
-        // --- CATEGORY TABS ---
-        // (Simplified: Just Horizontal Scroll of Groups)
-        // For performance, we might just stick to the filtered list from Home,
-        // but here is a simple group selector if needed.
-        // For now, let's assume it shows the current group passed from Home.
         Text(
             text = "Group: ${uiState.currentGroup}",
             color = NeonBlue,
@@ -91,7 +83,6 @@ fun GuideScreen(
                 CircularProgressIndicator(color = NeonBlue)
             }
         } else {
-            // --- CHANNEL LIST ---
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(bottom = 32.dp),
@@ -99,7 +90,7 @@ fun GuideScreen(
             ) {
                 items(
                     items = uiState.channels,
-                    key = { it.channel.id } // CRITICAL for performance
+                    key = { it.channel.id }
                 ) { item ->
                     GuideRow(
                         item = item,
@@ -125,12 +116,11 @@ fun GuideRow(
     val channel = item.channel
     val program = item.program
 
-    // OPTIMIZATION: Memoize image request
     val context = LocalContext.current
     val imageRequest = remember(channel.cover) {
         ImageRequest.Builder(context)
             .data(channel.cover)
-            .size(100, 100) // Small icon
+            .size(100, 100)
             .crossfade(false)
             .build()
     }
@@ -148,7 +138,6 @@ fun GuideRow(
             .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 1. Channel Icon
         Box(
             modifier = Modifier
                 .size(64.dp)
@@ -171,7 +160,6 @@ fun GuideRow(
 
         Spacer(Modifier.width(16.dp))
 
-        // 2. Channel Name
         Text(
             text = channel.title,
             color = if (isFocused) White else Color.LightGray,
@@ -184,7 +172,6 @@ fun GuideRow(
 
         Spacer(Modifier.width(16.dp))
 
-        // 3. Program Info (Current)
         Column(modifier = Modifier.weight(1f)) {
             if (program != null) {
                 Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
@@ -205,7 +192,7 @@ fun GuideRow(
 
                 Spacer(Modifier.height(8.dp))
 
-                // Progress Bar
+                // FIXED: Use lambda for progress
                 LinearProgressIndicator(
                     progress = { TimeUtils.getProgress(program.start, program.end) },
                     modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),

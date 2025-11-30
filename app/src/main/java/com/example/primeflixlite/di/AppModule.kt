@@ -2,6 +2,7 @@ package com.example.primeflixlite.di
 
 import android.content.Context
 import androidx.room.Room
+import coil.ImageLoader
 import com.example.primeflixlite.data.local.PrimeFlixDatabase
 import com.example.primeflixlite.data.local.dao.ChannelDao
 import com.example.primeflixlite.data.local.dao.MediaMetadataDao
@@ -43,7 +44,7 @@ object AppModule {
             PrimeFlixDatabase::class.java,
             "primeflix_db"
         )
-            .fallbackToDestructiveMigration() // Useful during dev/schema changes
+            .fallbackToDestructiveMigration()
             .build()
     }
 
@@ -76,6 +77,19 @@ object AppModule {
             .build()
     }
 
+    // FIXED: Added missing ImageLoader provider (Critical Build Fix)
+    @Provides
+    @Singleton
+    fun provideImageLoader(
+        @ApplicationContext context: Context,
+        okHttpClient: OkHttpClient
+    ): ImageLoader {
+        return ImageLoader.Builder(context)
+            .okHttpClient(okHttpClient)
+            .crossfade(true)
+            .build()
+    }
+
     @Provides
     @Singleton
     fun provideFeedbackManager(@ApplicationContext context: Context): FeedbackManager {
@@ -94,7 +108,8 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideXmltvParser(client: OkHttpClient): XmltvParser = XmltvParser(client)
+    fun provideXmltvParser(client: OkHttpClient, feedbackManager: FeedbackManager): XmltvParser =
+        XmltvParser(client, feedbackManager)
 
     @Provides
     @Singleton
@@ -107,7 +122,7 @@ object AppModule {
 
         return Retrofit.Builder()
             .baseUrl("https://api.themoviedb.org/3/")
-            .client(client) // Reuse OkHttp for pooling
+            .client(client)
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()
             .create(TmdbService::class.java)

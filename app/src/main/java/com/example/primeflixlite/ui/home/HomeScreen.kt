@@ -14,8 +14,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -39,7 +39,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.primeflixlite.data.local.entity.Channel
@@ -58,8 +57,8 @@ fun HomeScreen(
     onChannelClick: (Channel) -> Unit,
     onSearchClick: () -> Unit,
     onAddAccountClick: () -> Unit,
-    onGuideClick: () -> Unit,    // NEW: Callback for Guide
-    onSettingsClick: () -> Unit  // NEW: Callback for Settings
+    onGuideClick: () -> Unit,
+    onSettingsClick: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val initialFocusRequester = remember { FocusRequester() }
@@ -67,7 +66,6 @@ fun HomeScreen(
 
     LaunchedEffect(uiState.isLoading) {
         if (!uiState.isLoading && !hasFocused) {
-            // Only auto-focus if we have content
             if (uiState.categories.isNotEmpty()) {
                 initialFocusRequester.requestFocus()
                 hasFocused = true
@@ -94,7 +92,6 @@ fun HomeScreen(
             ) {
                 Text("Select Profile", style = MaterialTheme.typography.headlineMedium, color = Color.White)
 
-                // "Add New" Button
                 Button(
                     onClick = onAddAccountClick,
                     colors = ButtonDefaults.buttonColors(containerColor = NeonBlue)
@@ -115,7 +112,6 @@ fun HomeScreen(
                 }
             }
 
-            // Empty State (No Playlists)
             if (uiState.playlists.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -158,16 +154,16 @@ fun HomeScreen(
                         )
                     }
 
-                    // NEW: TV Guide Button (Only visible in Live tab)
                     if (uiState.selectedTab == StreamType.LIVE) {
                         Spacer(Modifier.width(16.dp))
                         Button(
                             onClick = onGuideClick,
-                            colors = ButtonDefaults.buttonColors(containerColor = BurntYellow), // Use secondary color
+                            colors = ButtonDefaults.buttonColors(containerColor = BurntYellow),
                             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
                             modifier = Modifier.height(36.dp)
                         ) {
-                            Icon(Icons.Default.List, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                            // FIXED: Use AutoMirrored List Icon
+                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
                             Text("TV GUIDE", color = Color.Black, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
                         }
@@ -211,7 +207,6 @@ fun HomeScreen(
             } else {
                 Column(modifier = Modifier.fillMaxSize()) {
 
-                    // NEW: "My List" / Favorites Row
                     if (uiState.favorites.isNotEmpty()) {
                         ContinueWatchingLane(
                             title = "My List",
@@ -280,8 +275,6 @@ fun HomeScreen(
         }
     }
 }
-
-// --- LOCAL HELPERS ---
 
 @Composable
 fun NavTab(title: String, isSelected: Boolean, onClick: () -> Unit) {
@@ -362,6 +355,8 @@ fun ChannelCard(channelWithProgram: ChannelWithProgram, imageLoader: coil.ImageL
             if (program != null) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(text = program.title, style = MaterialTheme.typography.bodySmall, color = NeonBlue, maxLines = 1)
+
+                // FIXED: Use lambda syntax for progress
                 LinearProgressIndicator(
                     progress = { TimeUtils.getProgress(program.start, program.end) },
                     modifier = Modifier.fillMaxWidth().height(2.dp).padding(top=4.dp),
