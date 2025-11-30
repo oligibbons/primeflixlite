@@ -1,12 +1,19 @@
 package com.example.primeflixlite.util
 
+import android.content.Context
+import android.widget.Toast
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class FeedbackManager @Inject constructor() {
+class FeedbackManager @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
 
     private val _state = MutableStateFlow<FeedbackState>(FeedbackState.Idle)
     val state = _state.asStateFlow()
@@ -16,7 +23,7 @@ class FeedbackManager @Inject constructor() {
         _state.value = FeedbackState.Loading(task, type, 0f)
     }
 
-    fun updateProgress(progress: Float) {
+    suspend fun updateProgress(progress: Float) {
         val current = _state.value
         if (current is FeedbackState.Loading) {
             _state.value = current.copy(progress = progress)
@@ -29,12 +36,18 @@ class FeedbackManager @Inject constructor() {
         _state.value = FeedbackState.ImportingCount(task, type, current, total)
     }
 
-    fun showSuccess(message: String) {
+    suspend fun showSuccess(message: String) = withContext(Dispatchers.Main) {
+        // Update State for Overlay
         _state.value = FeedbackState.Success(message)
+        // Also show Toast for legacy/backup visibility
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
     }
 
-    fun showError(message: String) {
+    suspend fun showError(message: String) = withContext(Dispatchers.Main) {
+        // Update State for Overlay
         _state.value = FeedbackState.Error(message)
+        // Also show Toast
+        Toast.makeText(context, "Error: $message", Toast.LENGTH_LONG).show()
     }
 
     fun dismiss() {

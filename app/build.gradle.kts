@@ -1,20 +1,20 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.ksp) // Required for Room & Hilt
-    alias(libs.plugins.hilt.android)
-    id("kotlin-parcelize")
+    alias(libs.plugins.kotlin.android) // Fixed: Was libs.plugins.jetbrains...
+    alias(libs.plugins.kotlin.compose) // Added: Defined in your TOML
+    alias(libs.plugins.kotlin.serialization) // Fixed: Uses TOML version
+    alias(libs.plugins.ksp) // Fixed: Uses TOML version
+    alias(libs.plugins.hilt.android) // Fixed: Uses TOML version
+    id("kotlin-kapt") // Required for Hilt (until full KSP migration)
 }
 
 android {
     namespace = "com.example.primeflixlite"
-    compileSdk = 35
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.example.primeflixlite"
-        minSdk = 24 // Android 7.0 (Safe for Android 11 Projector)
+        minSdk = 21
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
@@ -27,7 +27,7 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false // Disabled for easier debugging on TV box
+            isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -35,14 +35,17 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
     }
     kotlinOptions {
-        jvmTarget = "11"
+        jvmTarget = "1.8"
     }
     buildFeatures {
         compose = true
+    }
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.1"
     }
     packaging {
         resources {
@@ -52,45 +55,45 @@ android {
 }
 
 dependencies {
-    // --- Core Android & Compose ---
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-
-    // Icons (Extended required for specific UI icons)
+    // Extended Icons for 'Pause', 'PlayArrow'
     implementation(libs.androidx.compose.material.icons.extended)
 
-    // --- Dependency Injection (Hilt) ---
-    implementation(libs.hilt.android)
-    implementation(libs.androidx.hilt.navigation.compose)
-    ksp(libs.hilt.compiler)
+    // TV Compose (Not in TOML yet, keeping hardcoded)
+    implementation("androidx.tv:tv-foundation:1.0.0-alpha10")
+    implementation("androidx.tv:tv-material:1.0.0-alpha10")
 
-    // --- Local Database (Room) ---
-    val roomVersion = "2.6.1"
-    implementation("androidx.room:room-runtime:$roomVersion")
-    implementation("androidx.room:room-ktx:$roomVersion") // Coroutines support
-    ksp("androidx.room:room-compiler:$roomVersion")
-
-    // --- Networking & Parsing ---
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
-
-    // --- Image Loading (Coil) ---
+    // Coil (Not in TOML yet, keeping hardcoded)
     implementation("io.coil-kt:coil-compose:2.6.0")
 
-    // --- Video Player (Media3 / ExoPlayer) ---
-    val media3Version = "1.3.0"
-    implementation("androidx.media3:media3-exoplayer:$media3Version")
-    implementation("androidx.media3:media3-ui:$media3Version")
-    implementation("androidx.media3:media3-common:$media3Version")
+    // Room
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
 
-    // --- Testing ---
+    // Hilt
+    implementation(libs.hilt.android)
+    kapt(libs.hilt.compiler)
+    implementation(libs.androidx.hilt.navigation.compose)
+
+    // Networking (Retrofit & OkHttp)
+    // You haven't added these to TOML yet, so we keep them hardcoded for now
+    // to avoid "Unresolved reference" errors.
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // Serialization & Converters
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+    implementation("com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter:1.0.0")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

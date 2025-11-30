@@ -1,4 +1,3 @@
-// file: app/src/main/java/com/example/primeflixlite/data/local/entity/Channel.kt
 package com.example.primeflixlite.data.local.entity
 
 import androidx.room.ColumnInfo
@@ -7,10 +6,10 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(
-    tableName = "channels",
+    tableName = "streams", // Fixed table name
     indices = [
-        Index(value = ["playlist_url", "group"]), // For category browsing
-        Index(value = ["canonical_title"]), // For grouping duplicates
+        Index(value = ["playlist_url", "group"]),
+        Index(value = ["canonical_title"]),
         Index(value = ["stream_id"])
     ]
 )
@@ -22,21 +21,21 @@ data class Channel(
     val playlistUrl: String,
 
     @ColumnInfo(name = "stream_id")
-    val streamId: String,
+    val streamId: String = "", // Added Default
 
     @ColumnInfo(name = "title")
-    val title: String, // The raw original title
+    val title: String,
 
-    // --- NEW FIELDS FOR SMART GROUPING ---
+    // --- NEW FIELDS (With Defaults to fix build errors) ---
     @ColumnInfo(name = "canonical_title")
-    val canonicalTitle: String? = null, // "Avengers Endgame" (Normalized)
+    val canonicalTitle: String? = null,
 
     @ColumnInfo(name = "quality")
-    val quality: String = "SD", // "4K", "1080p", "SD"
+    val quality: String = "SD",
 
     @ColumnInfo(name = "tmdb_id")
-    val tmdbId: Int? = null, // Link to rich metadata
-    // -------------------------------------
+    val tmdbId: Int? = null,
+    // -----------------------------------------------------
 
     @ColumnInfo(name = "group")
     val group: String,
@@ -45,13 +44,13 @@ data class Channel(
     val url: String,
 
     @ColumnInfo(name = "cover")
-    val cover: String?,
+    val cover: String? = null, // Added Default
 
     @ColumnInfo(name = "type")
-    val type: String, // StreamType.name (LIVE, MOVIE, SERIES)
+    val type: String,
 
     @ColumnInfo(name = "relation_id")
-    val relationId: String? = null, // EPG ID
+    val relationId: String? = null,
 
     @ColumnInfo(name = "is_favorite")
     val isFavorite: Boolean = false

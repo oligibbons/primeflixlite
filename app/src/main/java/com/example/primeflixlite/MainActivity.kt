@@ -50,7 +50,7 @@ class MainActivity : ComponentActivity() {
             PrimeFlixLiteTheme {
                 val navController = rememberNavController()
 
-                // Global Notification Overlay
+                // Global Notification Overlay driven by FeedbackManager StateFlow
                 NotificationOverlay(feedbackManager)
 
                 NavHost(navController = navController, startDestination = "splash") {
@@ -81,7 +81,7 @@ class MainActivity : ComponentActivity() {
                             onSearchClick = { navController.navigate("search") },
                             onAddAccountClick = { navController.navigate("add_xtream") },
                             onGuideClick = {
-                                // Pass current group info?
+                                // Pass current group info
                                 val group = viewModel.uiState.value.selectedCategory
                                 val encodedGroup = URLEncoder.encode(group, StandardCharsets.UTF_8.toString())
                                 navController.navigate("guide/$encodedGroup")
@@ -92,10 +92,9 @@ class MainActivity : ComponentActivity() {
 
                     composable("player/{channelId}") { backStackEntry ->
                         val viewModel = hiltViewModel<PlayerViewModel>()
-                        // FIX: Use toLongOrNull() because Channel.id is Long
                         val channelId = backStackEntry.arguments?.getString("channelId")?.toLongOrNull()
 
-                        // Using placeholder for initial render
+                        // Using placeholder for initial render - Relying on Default values in Entity for missing fields
                         PlayerScreen(
                             initialChannel = Channel(id = channelId ?: 0, title = "Loading...", url = "", playlistUrl = "", type = "", group = ""),
                             viewModel = viewModel,
@@ -110,13 +109,13 @@ class MainActivity : ComponentActivity() {
 
                     composable("details/{channelId}") { backStackEntry ->
                         val viewModel = hiltViewModel<com.example.primeflixlite.ui.details.DetailsViewModel>()
-                        // FIX: Use toLongOrNull() because Channel.id is Long
                         val channelId = backStackEntry.arguments?.getString("channelId")?.toLongOrNull()
 
+                        // Placeholder
                         val placeholder = Channel(id = channelId ?: 0, title = "Loading...", url = "", playlistUrl = "", type = "", group = "")
 
                         DetailsScreen(
-                            channel = placeholder, // VM will replace this
+                            channel = placeholder, // VM will replace this with real data
                             viewModel = viewModel,
                             imageLoader = imageLoader,
                             onPlayClick = { url ->

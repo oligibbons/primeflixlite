@@ -1,8 +1,8 @@
 package com.example.primeflixlite.data.parser.m3u
 
-import android.util.Log
 import com.example.primeflixlite.data.local.entity.Channel
 import com.example.primeflixlite.data.local.entity.StreamType
+import com.example.primeflixlite.util.TitleNormalizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -10,78 +10,67 @@ import kotlinx.coroutines.flow.flowOn
 import java.io.BufferedReader
 import java.io.InputStream
 import java.io.InputStreamReader
+import javax.inject.Inject
 
-class M3UParserImpl : M3UParser {
+class M3UParserImpl @Inject constructor() : M3UParser {
 
     override fun parse(inputStream: InputStream): Flow<M3UData> = flow {
         val reader = BufferedReader(InputStreamReader(inputStream))
         var line: String?
-        var currentData = M3UData(url = "")
+        var currentData: M3UData? = null
 
         while (reader.readLine().also { line = it } != null) {
-            val cleanLine = line?.trim() ?: continue
+            val l = line?.trim() ?: continue
 
-            if (cleanLine.startsWith("#EXTINF:")) {
-                // Parse metadata
-                val info = parseExtInf(cleanLine)
-                currentData = info
-            } else if (cleanLine.isNotEmpty() && !cleanLine.startsWith("#")) {
-                // It's a URL
-                if (currentData.name != null) {
-                    emit(currentData.copy(url = cleanLine))
-                }
-                // Reset for next entry
-                currentData = M3UData(url = "")
+            if (l.startsWith("#EXTINF:")) {
+                // Simple parsing logic
+                val title = l.substringAfterLast(",").trim()
+                val group = if (l.contains("group-title=\"")) {
+                    l.substringAfter("group-title=\"").substringBefore("\"")
+                } else "Uncategorized"
+                val logo = if (l.contains("tvg-logo=\"")) {
+                    l.substringAfter("tvg-logo=\"").substringBefore("\"")
+                } else null
+                val id = if (l.contains("tvg-id=\"")) {
+                    l.substringAfter("tvg-id=\"").substringBefore("\"")
+                } else null
+
+                currentData = M3UData(title, group, logo, "", id)
+            } else if (!l.startsWith("#") && l.isNotEmpty() && currentData != null) {
+                emit(currentData.copy(url = l))
+                currentData = null
             }
         }
     }.flowOn(Dispatchers.IO)
-
-    private fun parseExtInf(line: String): M3UData {
-        try {
-            val parts = line.split(",", limit = 2)
-            val attributes = parts.getOrElse(0) { "" }
-            val name = parts.getOrElse(1) { "Unknown Channel" }
-
-            val logo = extractAttribute(attributes, "tvg-logo")
-            val id = extractAttribute(attributes, "tvg-id")
-            val group = extractAttribute(attributes, "group-title")
-
-            return M3UData(
-                name = name,
-                logo = logo,
-                tvgId = id,
-                group = group,
-                url = ""
-            )
-        } catch (e: Exception) {
-            Log.e("M3UParser", "Error parsing line: $line", e)
-            return M3UData(url = "")
-        }
-    }
-
-    private fun extractAttribute(line: String, key: String): String? {
-        val pattern = "$key=\""
-        val startIndex = line.indexOf(pattern)
-        if (startIndex == -1) return null
-
-        val endIndex = line.indexOf("\"", startIndex + pattern.length)
-        if (endIndex == -1) return null
-
-        return line.substring(startIndex + pattern.length, endIndex)
-    }
 }
 
-// Extension function to map parser data to database entity
+// Extension to map M3UData to Channel
 fun M3UData.toChannel(playlistUrl: String): Channel {
-    val isVod = url.endsWith(".mp4") || url.endsWith(".mkv") || url.endsWith(".avi")
+    // Generate a pseudo-ID for M3U items because M3U doesn't ensure unique IDs
+    val generatedId = this.url.hashCode().toString()
+
+    // Use Normalizer to fill new metadata fields (Canonical Title, Quality)
+    val info = TitleNormalizer.parse(this.title)
+
+    // Guess type based on URL extension or path
+    val type = if (this.url.endsWith(".m3u8") || this.url.contains("/live/")) {
+        StreamType.LIVE
+    } else if (this.url.endsWith(".mp4") || this.url.endsWith(".mkv")) {
+        StreamType.MOVIE
+    } else {
+        StreamType.LIVE
+    }
+
     return Channel(
         playlistUrl = playlistUrl,
-        title = name ?: "Unknown",
-        group = group ?: "Uncategorized",
-        url = url,
-        cover = logo,
-        // FIX: Convert Enum to String
-        type = if (isVod) StreamType.MOVIE.name else StreamType.LIVE.name,
-        relationId = tvgId
+        streamId = generatedId, // REQUIRED: Fixes "No value passed" error
+        title = this.title,
+        canonicalTitle = info.normalizedTitle, // NEW: For deduplication
+        quality = info.quality, // NEW: For version selection
+        group = this.group,
+        url = this.url,
+        cover = this.logo,
+        type = type.name,
+        relationId = this.tvgId
     )
 }
