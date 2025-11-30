@@ -9,9 +9,7 @@ import kotlinx.serialization.json.decodeFromStream
 import kotlinx.serialization.serializer
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.ResponseBody
 import okio.Buffer
-import okio.BufferedSource
 import okio.ForwardingSource
 import okio.Source
 import okio.buffer
@@ -58,7 +56,6 @@ class XtreamParserImpl(
     override suspend fun getSeriesEpisodes(input: XtreamInput, seriesId: Int): List<XtreamChannelInfo.Episode> {
         val url = "${input.basicUrl}/player_api.php?username=${input.username}&password=${input.password}&action=get_series_info&series_id=$seriesId"
 
-        // No feedback needed for small individual series requests to avoid UI spam
         return suspendCancellableCoroutine { continuation ->
             val request = Request.Builder().url(url).build()
             client.newCall(request).enqueue(object : okhttp3.Callback {
@@ -110,9 +107,9 @@ class XtreamParserImpl(
                 override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
                     response.use { resp ->
                         if (!resp.isSuccessful) {
-                            val errorMsg = "API Error: ${resp.code}"
-                            feedbackManager.showError(errorMsg)
-                            if (continuation.isActive) continuation.resumeWithException(IOException(errorMsg))
+                            val msg = "API Error: ${resp.code}"
+                            feedbackManager.showError(msg)
+                            if (continuation.isActive) continuation.resumeWithException(IOException(msg))
                             return
                         }
 
@@ -122,17 +119,19 @@ class XtreamParserImpl(
                             return
                         }
 
-                        // WRAP THE STREAM TO TRACK PROGRESS
-                        val progressSource = ProgressResponseBody(body) { progress ->
-                            feedbackManager.updateProgress(progress)
-                        }.source()
+                        // Use custom ProgressSource to track bytes
+                        val progressSource = ProgressSource(
+                            delegate = body.source(),
+                            contentLength = body.contentLength(),
+                            onProgress = { feedbackManager.updateProgress(it) }
+                        )
 
                         try {
-                            // Decode directly from the progress-tracking source
-                            val result = json.decodeFromStream(serializer, progressSource.inputStream())
+                            val bufferedSource = progressSource.buffer()
+                            val result = json.decodeFromStream(serializer, bufferedSource.inputStream())
                             if (continuation.isActive) continuation.resume(result)
                         } catch (e: Exception) {
-                            feedbackManager.showError("Parse Error: ${e.message}")
+                            feedbackManager.showError("Parse Failed: ${e.message}")
                             if (continuation.isActive) continuation.resumeWithException(e)
                         }
                     }
@@ -142,13 +141,12 @@ class XtreamParserImpl(
         }
     }
 
-    // --- Helper Class to Intercept Bytes ---
-    private class ProgressResponseBody(
-        private val responseBody: ResponseBody,
+    private class ProgressSource(
+        delegate: Source,
+        private val contentLength: Long,
         private val onProgress: (Float) -> Unit
-    ) : ForwardingSource(responseBody.source()) {
+    ) : ForwardingSource(delegate) {
         private var totalBytesRead = 0L
-        private val contentLength = responseBody.contentLength()
 
         override fun read(sink: Buffer, byteCount: Long): Long {
             val bytesRead = super.read(sink, byteCount)
@@ -157,6 +155,8 @@ class XtreamParserImpl(
                 if (contentLength > 0) {
                     val percent = totalBytesRead.toFloat() / contentLength.toFloat()
                     onProgress(percent)
+                } else {
+                    onProgress(-1f) // Indeterminate
                 }
             }
             return bytesRead

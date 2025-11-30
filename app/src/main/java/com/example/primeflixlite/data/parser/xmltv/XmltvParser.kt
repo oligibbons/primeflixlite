@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.ResponseBody
 import okio.Buffer
 import okio.ForwardingSource
 import okio.Source
@@ -24,13 +23,11 @@ class XmltvParser(
     private val client: OkHttpClient,
     private val feedbackManager: FeedbackManager
 ) {
-    // XMLTV dates are usually "yyyyMMddHHmmss Z"
     private val dateFormat = SimpleDateFormat("yyyyMMddHHmmss Z", Locale.getDefault()).apply {
         timeZone = TimeZone.getTimeZone("UTC")
     }
 
     fun parse(url: String): Flow<List<Programme>> = flow {
-        // Feedback is handled by Repository for "Loading...", but specific progress starts here
         val request = Request.Builder().url(url).build()
         val response = client.newCall(request).execute()
 
@@ -41,15 +38,18 @@ class XmltvParser(
 
         val body = response.body ?: throw IOException("Empty EPG Body")
 
-        // Wrap the stream to track progress
-        val progressSource = ProgressResponseBody(body) { progress ->
-            feedbackManager.updateProgress(progress)
-        }.source()
+        val progressSource = ProgressSource(
+            delegate = body.source(),
+            contentLength = body.contentLength(),
+            onProgress = { feedbackManager.updateProgress(it) }
+        )
 
-        progressSource.buffer().inputStream().use { inputStream ->
+        val inputStream = progressSource.buffer().inputStream()
+
+        inputStream.use { stream ->
             val parser = Xml.newPullParser()
             parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
-            parser.setInput(inputStream, null)
+            parser.setInput(stream, null)
 
             val batch = mutableListOf<Programme>()
 
@@ -133,13 +133,12 @@ class XmltvParser(
         }
     }
 
-    // Helper class for byte progress
-    private class ProgressResponseBody(
-        private val responseBody: ResponseBody,
+    private class ProgressSource(
+        delegate: Source,
+        private val contentLength: Long,
         private val onProgress: (Float) -> Unit
-    ) : ForwardingSource(responseBody.source()) {
+    ) : ForwardingSource(delegate) {
         private var totalBytesRead = 0L
-        private val contentLength = responseBody.contentLength()
 
         override fun read(sink: Buffer, byteCount: Long): Long {
             val bytesRead = super.read(sink, byteCount)
@@ -148,6 +147,8 @@ class XmltvParser(
                 if (contentLength > 0) {
                     val percent = totalBytesRead.toFloat() / contentLength.toFloat()
                     onProgress(percent)
+                } else {
+                    onProgress(-1f)
                 }
             }
             return bytesRead

@@ -1,8 +1,13 @@
 package com.example.primeflixlite.ui.player
 
+import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
 import com.example.primeflixlite.data.local.entity.Channel
 import com.example.primeflixlite.data.local.entity.Programme
 import com.example.primeflixlite.data.repository.PrimeFlixRepository
@@ -27,60 +32,83 @@ class PlayerViewModel @Inject constructor(
     private val _currentProgram = MutableStateFlow<Programme?>(null)
     val currentProgram = _currentProgram.asStateFlow()
 
-    // Playlist context for zapping
-    private var playlistChannels: List<Channel> = emptyList()
-
     private val _resizeMode = MutableStateFlow(0) // 0: Fit, 1: Fill, 2: Zoom
     val resizeMode = _resizeMode.asStateFlow()
 
-    // Progress tracking job
+    private val _isPlaying = MutableStateFlow(true)
+    val isPlaying = _isPlaying.asStateFlow()
+
+    // Player Instance (Managed here to prevent crashes)
+    var player: ExoPlayer? = null
+        private set
+
+    // Internal State
+    private var playlistChannels: List<Channel> = emptyList()
     private var progressJob: Job? = null
 
     // --- Initialization ---
-    fun initialize(channel: Channel) {
-        // If it's the same channel URL, we just update the object (in case favorite status changed)
-        // but we don't reset the player or EPG reload unless necessary.
-        if (_currentChannel.value?.url == channel.url) {
-            _currentChannel.value = channel
-            return
-        }
+    fun initialize(context: Context, channel: Channel) {
+        // Prevent re-initialization if already playing the same channel
+        if (player != null && _currentChannel.value?.url == channel.url) return
 
         _currentChannel.value = channel
         loadEpgForChannel(channel)
+        loadPlaylistContext(channel)
 
-        // Fetch sibling channels for zapping context
-        viewModelScope.launch {
-            // We collect once to get the list for zapping
-            repository.getChannels(channel.playlistUrl).collect { channels ->
-                playlistChannels = channels
-            }
-        }
+        initializePlayerSafely(context, channel)
     }
 
-    // --- Favorites Logic (NEW) ---
-    fun toggleFavorite() {
-        val current = _currentChannel.value ?: return
-        viewModelScope.launch {
-            // 1. Update Database
-            repository.toggleFavorite(current)
+    private fun initializePlayerSafely(context: Context, channel: Channel) {
+        releasePlayer() // Cleanup any old instance
 
-            // 2. Update Local State immediately for UI feedback
-            // We create a copy of the channel with the toggled boolean
-            _currentChannel.value = current.copy(isFavorite = !current.isFavorite)
+        try {
+            player = ExoPlayer.Builder(context)
+                .build()
+                .apply {
+                    setMediaItem(MediaItem.fromUri(channel.url))
+                    prepare()
+                    playWhenReady = true
+                    addListener(object : Player.Listener {
+                        override fun onIsPlayingChanged(isPlaying: Boolean) {
+                            _isPlaying.value = isPlaying
+                            if (isPlaying) startProgressTracking()
+                            else stopProgressTracking()
+                        }
+
+                        override fun onPlayerError(error: PlaybackException) {
+                            Log.e("PlayerViewModel", "ExoPlayer Critical Error", error)
+                            // Crash Prevention: Don't let the app die, just stop playback
+                            stop()
+                        }
+                    })
+                }
+        } catch (e: Exception) {
+            Log.e("PlayerViewModel", "Crash prevented during player init", e)
         }
     }
 
     // --- Zapping Logic ---
+    private fun loadPlaylistContext(channel: Channel) {
+        viewModelScope.launch {
+            try {
+                // Collect once to get the list for zapping
+                repository.getChannels(channel.playlistUrl).collect { channels ->
+                    playlistChannels = channels
+                }
+            } catch (e: Exception) {
+                Log.e("PlayerVM", "Failed to load playlist context", e)
+            }
+        }
+    }
+
     fun nextChannel() {
         val current = _currentChannel.value ?: return
         if (playlistChannels.isEmpty()) return
 
         val index = playlistChannels.indexOfFirst { it.url == current.url }
         if (index != -1) {
-            // Loop back to start if at end
             val nextIndex = if (index + 1 < playlistChannels.size) index + 1 else 0
-            val nextChannel = playlistChannels[nextIndex]
-            switchChannel(nextChannel)
+            switchChannel(playlistChannels[nextIndex])
         }
     }
 
@@ -90,55 +118,89 @@ class PlayerViewModel @Inject constructor(
 
         val index = playlistChannels.indexOfFirst { it.url == current.url }
         if (index != -1) {
-            // Loop to end if at start
             val prevIndex = if (index - 1 >= 0) index - 1 else playlistChannels.lastIndex
-            val prevChannel = playlistChannels[prevIndex]
-            switchChannel(prevChannel)
+            switchChannel(playlistChannels[prevIndex])
         }
     }
 
     private fun switchChannel(channel: Channel) {
         _currentChannel.value = channel
         loadEpgForChannel(channel)
+
+        // Fast switch without recreating the whole player
+        player?.apply {
+            setMediaItem(MediaItem.fromUri(channel.url))
+            prepare()
+            play()
+        }
+    }
+
+    // --- Favorites Logic ---
+    fun toggleFavorite() {
+        val current = _currentChannel.value ?: return
+        viewModelScope.launch {
+            repository.toggleFavorite(current)
+            _currentChannel.value = current.copy(isFavorite = !current.isFavorite)
+        }
     }
 
     // --- EPG Logic ---
     private fun loadEpgForChannel(channel: Channel) {
         viewModelScope.launch {
-            // Try relationId (XMLTV ID) first, then title fallback
             val epgId = channel.relationId ?: channel.title
             val program = repository.getCurrentProgram(epgId)
             _currentProgram.value = program
         }
     }
 
-    // --- Player Logic ---
+    // --- Player Controls ---
+    fun playPause() {
+        player?.let {
+            if (it.isPlaying) it.pause() else it.play()
+        }
+    }
+
+    fun seek(position: Long) {
+        player?.seekTo(position)
+    }
+
     fun toggleResizeMode() {
-        // Cycle: 0 -> 1 -> 2 -> 0
         _resizeMode.value = (_resizeMode.value + 1) % 3
     }
 
-    fun startProgressTracking(player: Player) {
+    private fun startProgressTracking() {
         progressJob?.cancel()
         progressJob = viewModelScope.launch {
             while (isActive) {
-                val channel = _currentChannel.value
-                if (player.isPlaying && channel != null && player.duration > 0) {
-                    repository.saveProgress(
-                        url = channel.url,
-                        position = player.currentPosition,
-                        duration = player.duration
-                    )
-                }
-                delay(10_000) // Save every 10s
+                delay(10_000)
+                saveCurrentProgress()
             }
         }
     }
 
-    fun saveFinalProgress(position: Long, duration: Long) {
-        val channel = _currentChannel.value ?: return
-        viewModelScope.launch {
-            repository.saveProgress(channel.url, position, duration)
+    private fun stopProgressTracking() {
+        progressJob?.cancel()
+        saveCurrentProgress()
+    }
+
+    private fun saveCurrentProgress() {
+        val p = player ?: return
+        val c = _currentChannel.value ?: return
+        if (p.duration > 0) {
+            viewModelScope.launch {
+                repository.saveProgress(c.url, p.currentPosition, p.duration)
+            }
         }
+    }
+
+    fun releasePlayer() {
+        stopProgressTracking()
+        player?.release()
+        player = null
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        releasePlayer()
     }
 }

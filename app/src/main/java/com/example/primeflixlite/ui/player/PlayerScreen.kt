@@ -11,13 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.common.C
-import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.DefaultLoadControl
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.example.primeflixlite.data.local.entity.Channel
@@ -34,77 +28,58 @@ fun PlayerScreen(
 ) {
     val context = LocalContext.current
 
-    LaunchedEffect(initialChannel) {
-        viewModel.initialize(initialChannel)
-    }
-
-    val currentChannel by viewModel.currentChannel.collectAsState()
-    val currentProgram by viewModel.currentProgram.collectAsState()
-    val resizeMode by viewModel.resizeMode.collectAsState()
-
-    val player = remember {
-        val loadControl = DefaultLoadControl.Builder()
-            .setAllocator(DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE))
-            .setBufferDurationsMs(15_000, 50_000, 1_500, 3_000)
-            .build()
-
-        ExoPlayer.Builder(context)
-            .setLoadControl(loadControl)
-            .build().apply {
-                playWhenReady = true
-            }
-    }
-
-    LaunchedEffect(currentChannel) {
-        currentChannel?.let { channel ->
-            val mediaItem = MediaItem.fromUri(channel.url)
-            player.setMediaItem(mediaItem)
-            player.prepare()
-            viewModel.startProgressTracking(player)
+    // Initialize Player Safely via ViewModel (runs once)
+    DisposableEffect(initialChannel) {
+        viewModel.initialize(context, initialChannel)
+        onDispose {
+            viewModel.releasePlayer()
         }
     }
 
-    var isPlaying by remember { mutableStateOf(true) }
+    // Observe State
+    val currentChannel by viewModel.currentChannel.collectAsState()
+    val currentProgram by viewModel.currentProgram.collectAsState()
+    val isPlaying by viewModel.isPlaying.collectAsState()
+    val resizeMode by viewModel.resizeMode.collectAsState()
+
+    // Local UI State for Seekbar
     var currentPosition by remember { mutableStateOf(0L) }
     var duration by remember { mutableStateOf(0L) }
 
-    LaunchedEffect(player) {
-        val listener = object : Player.Listener {
-            override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
-            override fun onPlaybackStateChanged(state: Int) {
-                if (state == Player.STATE_READY) duration = player.duration
-            }
-        }
-        player.addListener(listener)
+    // Polling Loop for UI Updates
+    LaunchedEffect(Unit) {
         while (isActive) {
-            currentPosition = player.currentPosition
+            viewModel.player?.let { p ->
+                if (p.isPlaying) {
+                    currentPosition = p.currentPosition
+                    duration = p.duration
+                }
+            }
             delay(1000)
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            viewModel.saveFinalProgress(player.currentPosition, player.duration)
-            player.release()
-        }
+    BackHandler {
+        onBack()
     }
 
-    BackHandler { onBack() }
-
     Box(modifier = Modifier.fillMaxSize().background(VoidBlack)) {
+        // Player Surface
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
-                    this.player = player
-                    useController = false
                     layoutParams = FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
+                    useController = false
                 }
             },
-            update = { view ->
-                view.resizeMode = when(resizeMode) {
+            update = { playerView ->
+                // Link view to ViewModel's player
+                playerView.player = viewModel.player
+
+                playerView.resizeMode = when (resizeMode) {
                     1 -> AspectRatioFrameLayout.RESIZE_MODE_FILL
                     2 -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
@@ -113,6 +88,7 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
+        // Overlay Controls
         if (currentChannel != null) {
             PlayerOverlay(
                 channel = currentChannel!!,
@@ -120,13 +96,15 @@ fun PlayerScreen(
                 isPlaying = isPlaying,
                 currentPosition = currentPosition,
                 duration = duration,
-                onPlayPause = { if (player.isPlaying) player.pause() else player.play() },
-                onSeek = { player.seekTo(it); currentPosition = it },
-                onNext = { viewModel.nextChannel() },
-                onPrev = { viewModel.prevChannel() },
-                onResize = { viewModel.toggleResizeMode() },
-                // FIX: Passed the missing callback
-                onFavorite = { viewModel.toggleFavorite() },
+                onPlayPause = viewModel::playPause,
+                onSeek = { pos ->
+                    viewModel.seek(pos)
+                    currentPosition = pos
+                },
+                onNext = viewModel::nextChannel,
+                onPrev = viewModel::prevChannel,
+                onResize = viewModel::toggleResizeMode,
+                onFavorite = viewModel::toggleFavorite,
                 onBack = onBack
             )
         }

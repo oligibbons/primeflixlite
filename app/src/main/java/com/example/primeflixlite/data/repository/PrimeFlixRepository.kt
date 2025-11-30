@@ -1,6 +1,8 @@
 package com.example.primeflixlite.data.repository
 
 import android.util.Log
+import androidx.room.withTransaction
+import com.example.primeflixlite.data.local.PrimeFlixDatabase
 import com.example.primeflixlite.data.local.dao.ChannelDao
 import com.example.primeflixlite.data.local.dao.PlaylistDao
 import com.example.primeflixlite.data.local.dao.ProgrammeDao
@@ -27,6 +29,7 @@ import javax.inject.Singleton
 
 @Singleton
 class PrimeFlixRepository @Inject constructor(
+    private val database: PrimeFlixDatabase, // Required for Transactions
     private val playlistDao: PlaylistDao,
     private val channelDao: ChannelDao,
     private val programmeDao: ProgrammeDao,
@@ -64,19 +67,27 @@ class PrimeFlixRepository @Inject constructor(
             }
 
             if (channels.isNotEmpty()) {
-                feedbackManager.showLoading("Saving Data...", "Database")
+                // Initial Feedback
+                feedbackManager.showLoading("Preparing Database...", "Cleaning up")
 
-                channelDao.deleteByPlaylist(playlist.url)
+                // TRANSACTION: Locks DB once, inserts everything, then unlocks.
+                // This makes saving 20k items take seconds instead of minutes.
+                database.withTransaction {
+                    channelDao.deleteByPlaylist(playlist.url)
 
-                // Chunked Insert with Progress Update
-                val batchSize = 500
-                val chunks = channels.chunked(batchSize)
-                val totalChunks = chunks.size
+                    // Chunked Insert with Live Count Updates
+                    val batchSize = 2000
+                    val chunks = channels.chunked(batchSize)
+                    val totalItems = channels.size
+                    var itemsSaved = 0
 
-                chunks.forEachIndexed { index, batch ->
-                    channelDao.insertAll(batch)
-                    val progress = (index + 1).toFloat() / totalChunks
-                    feedbackManager.updateProgress(progress)
+                    chunks.forEach { batch ->
+                        channelDao.insertAll(batch)
+                        itemsSaved += batch.size
+
+                        // UPDATE COUNT: "Importing: 2500 / 12000"
+                        feedbackManager.updateCount("Importing Channels...", "Database", itemsSaved, totalItems)
+                    }
                 }
 
                 Log.d("PrimeFlixRepo", "Synced ${channels.size} items for ${playlist.title}")

@@ -39,7 +39,6 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    // Inject ImageLoader directly via Hilt
     @Inject
     lateinit var imageLoader: ImageLoader
 

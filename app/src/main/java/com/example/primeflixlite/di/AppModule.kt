@@ -83,13 +83,13 @@ object AppModule {
     @Provides
     @Singleton
     fun provideXmltvParser(client: OkHttpClient, feedbackManager: FeedbackManager): XmltvParser {
-        // Updated to inject FeedbackManager
         return XmltvParser(client, feedbackManager)
     }
 
     @Provides
     @Singleton
     fun provideRepository(
+        database: PrimeFlixDatabase, // INJECTED for Transactions
         playlistDao: PlaylistDao,
         channelDao: ChannelDao,
         programmeDao: ProgrammeDao,
@@ -101,6 +101,7 @@ object AppModule {
         feedbackManager: FeedbackManager
     ): PrimeFlixRepository {
         return PrimeFlixRepository(
+            database,
             playlistDao,
             channelDao,
             programmeDao,
@@ -120,7 +121,7 @@ object AppModule {
             .okHttpClient(client)
             .memoryCache {
                 MemoryCache.Builder(context)
-                    .maxSizePercent(0.12)
+                    .maxSizePercent(0.12) // Low RAM Optim
                     .build()
             }
             .diskCache {

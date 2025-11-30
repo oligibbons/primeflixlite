@@ -8,7 +8,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,7 +20,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -49,7 +47,7 @@ fun NotificationOverlay(
 ) {
     val state by feedbackManager.state.collectAsState()
 
-    // Auto-dismiss Success/Error after 4 seconds
+    // Auto-dismiss Success/Error
     LaunchedEffect(state) {
         if (state is FeedbackState.Success || state is FeedbackState.Error) {
             kotlinx.coroutines.delay(4000)
@@ -77,17 +75,10 @@ fun NotificationOverlay(
                     .padding(16.dp)
             ) {
                 when (val currentState = state) {
-                    is FeedbackState.Loading -> LoadingContent(currentState)
-                    is FeedbackState.Success -> StatusContent(
-                        icon = Icons.Default.CheckCircle,
-                        color = Color.Green,
-                        message = currentState.message
-                    )
-                    is FeedbackState.Error -> StatusContent(
-                        icon = Icons.Default.Error,
-                        color = Color.Red,
-                        message = currentState.message
-                    )
+                    is FeedbackState.Loading -> LoadingProgress(currentState)
+                    is FeedbackState.ImportingCount -> LoadingCount(currentState)
+                    is FeedbackState.Success -> StatusContent(Icons.Default.CheckCircle, Color.Green, currentState.message)
+                    is FeedbackState.Error -> StatusContent(Icons.Default.Error, Color.Red, currentState.message)
                     else -> {}
                 }
             }
@@ -96,34 +87,42 @@ fun NotificationOverlay(
 }
 
 @Composable
-private fun LoadingContent(state: FeedbackState.Loading) {
+private fun LoadingProgress(state: FeedbackState.Loading) {
     Column {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(24.dp),
-                color = NeonBlue,
-                strokeWidth = 2.dp
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = state.task, // e.g. "Syncing Playlist..."
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = state.type, // e.g. "Movies"
-                    color = NeonBlue,
-                    style = MaterialTheme.typography.labelMedium
-                )
-            }
-        }
-
+        Header(state.task, state.type)
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Progress Bar with Percentage
-        val animatedProgress by animateFloatAsState(targetValue = state.progress)
+        if (state.progress >= 0f) {
+            val animatedProgress by animateFloatAsState(targetValue = state.progress)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LinearProgressIndicator(
+                    progress = { animatedProgress },
+                    modifier = Modifier.weight(1f).height(4.dp).clip(RoundedCornerShape(2.dp)),
+                    color = NeonBlue,
+                    trackColor = Color.DarkGray
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = "${(animatedProgress * 100).toInt()}%", color = Color.Gray, style = MaterialTheme.typography.labelSmall)
+            }
+        } else {
+            // Indeterminate
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                color = NeonBlue,
+                trackColor = Color.DarkGray
+            )
+        }
+    }
+}
+
+@Composable
+private fun LoadingCount(state: FeedbackState.ImportingCount) {
+    val percentage = if (state.total > 0) state.current.toFloat() / state.total.toFloat() else 0f
+    val animatedProgress by animateFloatAsState(targetValue = percentage)
+
+    Column {
+        Header(state.task, state.type)
+        Spacer(modifier = Modifier.height(12.dp))
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             LinearProgressIndicator(
@@ -134,10 +133,23 @@ private fun LoadingContent(state: FeedbackState.Loading) {
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "${(animatedProgress * 100).toInt()}%",
-                color = Color.Gray,
-                style = MaterialTheme.typography.labelSmall
+                text = "${state.current} / ${state.total}",
+                color = Color.White,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold
             )
+        }
+    }
+}
+
+@Composable
+private fun Header(task: String, type: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = NeonBlue, strokeWidth = 2.dp)
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Text(text = task, color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            Text(text = type, color = NeonBlue, style = MaterialTheme.typography.labelMedium)
         }
     }
 }
@@ -145,17 +157,8 @@ private fun LoadingContent(state: FeedbackState.Loading) {
 @Composable
 private fun StatusContent(icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color, message: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = color,
-            modifier = Modifier.size(28.dp)
-        )
+        Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(28.dp))
         Spacer(modifier = Modifier.width(12.dp))
-        Text(
-            text = message,
-            color = Color.White,
-            style = MaterialTheme.typography.bodyMedium
-        )
+        Text(text = message, color = Color.White, style = MaterialTheme.typography.bodyMedium)
     }
 }
