@@ -11,6 +11,7 @@ val PanelGrey = Color(0xFF1E1E1E)      // Lighter Panels
 
 // Accents
 val NeonBlue = Color(0xFF0099FF)       // Primary Glow (Samsung TV Plus vibe)
+val NeonBlueDim = Color(0xFF005599)    // Dimmed version for secondary elements
 val BurntYellow = Color(0xFFFFC107)    // Secondary/Action (Industrial safety yellow)
 
 // Text

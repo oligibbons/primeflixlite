@@ -23,6 +23,7 @@
         android:theme="@style/Theme.PrimeFlixLite"
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

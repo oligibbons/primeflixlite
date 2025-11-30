@@ -58,6 +58,19 @@ class PlayerViewModel @Inject constructor(
         initializePlayerSafely(context, channel)
     }
 
+    fun loadChannelById(id: Long) {
+        viewModelScope.launch {
+            val channel = repository.getChannelById(id)
+            if (channel != null) {
+                _currentChannel.value = channel
+                loadEpgForChannel(channel)
+                loadPlaylistContext(channel)
+                // Note: Actual ExoPlayer initialization still happens in the Composable's DisposableEffect
+                // using the passed context, but this ensures we have the full data object.
+            }
+        }
+    }
+
     private fun initializePlayerSafely(context: Context, channel: Channel) {
         releasePlayer() // Cleanup any old instance
 

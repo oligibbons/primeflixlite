@@ -70,21 +70,6 @@ class MainActivity : ComponentActivity() {
                             imageLoader = imageLoader,
                             onChannelClick = { channel ->
                                 val encodedUrl = URLEncoder.encode(channel.url, StandardCharsets.UTF_8.toString())
-                                val route = if (channel.type == "LIVE") {
-                                    "player/${channel.id}" // Pass ID, we'll look it up or pass URL if safe
-                                } else {
-                                    "details/${channel.id}"
-                                }
-
-                                // For simplicity in this demo, passing the object via a shared ViewModel or Repository is cleaner,
-                                // but for navigation arguments, we'll store the "selected" channel in a shared state or
-                                // just pass the ID. To keep it robust without complex graph scoping:
-                                // We will navigate and let the destination VM load by ID or URL.
-                                // However, passing complex objects in nav args is anti-pattern.
-                                // Quickest fix: Pass the ID.
-
-                                // *Simpler Approach for this codebase*:
-                                // Just pass the ID. The destination VM loads it from Repo.
 
                                 // IMPORTANT: Since our Channel entity has a generated ID, we use it.
                                 if (channel.type == "LIVE") {
@@ -107,27 +92,12 @@ class MainActivity : ComponentActivity() {
 
                     composable("player/{channelId}") { backStackEntry ->
                         val viewModel = hiltViewModel<PlayerViewModel>()
-                        val channelId = backStackEntry.arguments?.getString("channelId")?.toIntOrNull()
+                        // FIX: Use toLongOrNull() because Channel.id is Long
+                        val channelId = backStackEntry.arguments?.getString("channelId")?.toLongOrNull()
 
-                        // We need to fetch the channel object.
-                        // Since PlayerViewModel usually takes a channel to init,
-                        // we'll implement a loadById in VM or Repo.
-                        // Assuming Repository has `getChannelById`.
-                        // For now, let's assume we can retrieve it.
-                        // In a real app, I'd add `getChannelById` to Dao.
-                        // Let's implement a workaround using the cache in Repo if needed,
-                        // or better, add the method to DAO in next step if missing.
-
-                        // NOTE: For this specific response, I will assume the ViewModel can handle ID loading
-                        // or we passed the URL.
-
-                        // Temporary: Let's assume we passed the object via a static cache or similar if we didn't add getById.
-                        // Actually, let's assume `PlayerScreen` can handle the loading if we tweak it.
-                        // But to be safe and cleaner:
-                        // I will invoke a lookup in the VM `LaunchedEffect`.
-
+                        // Using placeholder for initial render
                         PlayerScreen(
-                            initialChannel = Channel(id = channelId ?: 0, title = "Loading...", url = "", playlistUrl = "", type = "", group = ""), // Placeholder
+                            initialChannel = Channel(id = channelId ?: 0, title = "Loading...", url = "", playlistUrl = "", type = "", group = ""),
                             viewModel = viewModel,
                             onBack = { navController.popBackStack() }
                         )
@@ -140,15 +110,9 @@ class MainActivity : ComponentActivity() {
 
                     composable("details/{channelId}") { backStackEntry ->
                         val viewModel = hiltViewModel<com.example.primeflixlite.ui.details.DetailsViewModel>()
-                        val channelId = backStackEntry.arguments?.getString("channelId")?.toIntOrNull()
+                        // FIX: Use toLongOrNull() because Channel.id is Long
+                        val channelId = backStackEntry.arguments?.getString("channelId")?.toLongOrNull()
 
-                        // Same pattern: DetailsScreen needs real data.
-                        // We will let ViewModel load it.
-
-                        // We need a dummy channel for the composable signature?
-                        // Or refactor DetailsScreen to take ID.
-                        // Refactoring DetailsScreen to observe VM state is better.
-                        // Using placeholder for now.
                         val placeholder = Channel(id = channelId ?: 0, title = "Loading...", url = "", playlistUrl = "", type = "", group = "")
 
                         DetailsScreen(
@@ -157,7 +121,6 @@ class MainActivity : ComponentActivity() {
                             imageLoader = imageLoader,
                             onPlayClick = { url ->
                                 // Play VOD directly
-                                // For VOD, we might want to pass the URL directly to player
                                 val encoded = URLEncoder.encode(url, StandardCharsets.UTF_8.toString())
                                 navController.navigate("player_vod/$encoded")
                             },

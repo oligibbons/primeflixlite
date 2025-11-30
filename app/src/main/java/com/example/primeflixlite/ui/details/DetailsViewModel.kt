@@ -40,6 +40,15 @@ class DetailsViewModel @Inject constructor(
         }
     }
 
+    fun loadChannelById(id: Long) {
+        viewModelScope.launch {
+            val channel = repository.getChannelById(id)
+            if (channel != null) {
+                loadContent(channel)
+            }
+        }
+    }
+
     fun toggleFavorite() {
         val current = _currentChannel.value ?: return
         viewModelScope.launch {

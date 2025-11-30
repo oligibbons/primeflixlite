@@ -15,6 +15,9 @@ interface ChannelDao {
     @Query("SELECT * FROM streams WHERE playlist_url = :playlistUrl ORDER BY `group`, title")
     fun getChannelsByPlaylist(playlistUrl: String): Flow<List<Channel>>
 
+    @Query("SELECT * FROM streams WHERE id = :id LIMIT 1")
+    suspend fun getChannelById(id: Long): Channel?
+
     @Query("""
         SELECT * FROM streams 
         WHERE title LIKE '%' || :query || '%' 

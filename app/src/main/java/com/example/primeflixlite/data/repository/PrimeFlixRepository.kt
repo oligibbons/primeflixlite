@@ -225,6 +225,8 @@ class PrimeFlixRepository @Inject constructor(
 
     fun searchChannels(query: String) = channelDao.searchChannels(query)
 
+    suspend fun getChannelById(id: Long) = channelDao.getChannelById(id)
+
     // --- FAVORITES & HISTORY ---
     val favorites: Flow<List<Channel>> = channelDao.getFavorites()
 
