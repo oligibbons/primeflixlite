@@ -87,12 +87,20 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    // --- Zapping Logic ---
+    // --- Zapping Logic (OPTIMIZED) ---
     private fun loadPlaylistContext(channel: Channel) {
         viewModelScope.launch {
             try {
-                // Collect once to get the list for zapping
-                repository.getChannels(channel.playlistUrl).collect { channels ->
+                // MEMORY OPTIMIZATION:
+                // Instead of loading ALL channels (which can be 20k+),
+                // we only load channels in the CURRENT GROUP and TYPE.
+                // This reduces the list size to usually < 200 items, safe for 1GB RAM.
+                // We reuse 'getVodChannels' because it returns a clean List<Channel> without EPG joins.
+                repository.getVodChannels(
+                    playlistUrl = channel.playlistUrl,
+                    type = channel.type,
+                    group = channel.group
+                ).collect { channels ->
                     playlistChannels = channels
                 }
             } catch (e: Exception) {

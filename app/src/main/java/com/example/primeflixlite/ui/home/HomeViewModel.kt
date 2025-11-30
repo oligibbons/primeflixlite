@@ -11,8 +11,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -25,8 +26,8 @@ class HomeViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState = _uiState.asStateFlow()
 
-    private var allChannels: List<ChannelWithProgram> = emptyList()
-    private var refreshJob: Job? = null
+    private var contentJob: Job? = null
+    private var groupsJob: Job? = null
 
     init {
         loadPlaylists()
@@ -37,6 +38,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             repository.playlists.collect { playlists ->
                 _uiState.value = _uiState.value.copy(playlists = playlists)
+                // Auto-select first playlist if none selected
                 if (_uiState.value.selectedPlaylist == null && playlists.isNotEmpty()) {
                     selectPlaylist(playlists.first())
                 }
@@ -57,17 +59,7 @@ class HomeViewModel @Inject constructor(
             selectedPlaylist = playlist,
             isLoading = true
         )
-        fetchChannels(playlist)
-    }
-
-    private fun fetchChannels(playlist: Playlist) {
-        refreshJob?.cancel()
-        refreshJob = repository.getChannelsWithEpg(playlist.url)
-            .onEach { channels ->
-                allChannels = channels
-                refreshContent()
-            }
-            .launchIn(viewModelScope)
+        refreshContent()
     }
 
     fun selectTab(tab: StreamType) {
@@ -77,54 +69,70 @@ class HomeViewModel @Inject constructor(
 
     fun selectCategory(category: String) {
         _uiState.value = _uiState.value.copy(selectedCategory = category)
-        filterChannels()
+        loadChannels() // Reload channels filter, no need to reload groups
+    }
+
+    private fun refreshContent() {
+        loadGroups()
+        loadChannels()
+        refreshContinueWatching()
+    }
+
+    private fun loadGroups() {
+        val playlist = _uiState.value.selectedPlaylist ?: return
+        val type = _uiState.value.selectedTab.name
+
+        groupsJob?.cancel()
+        groupsJob = repository.getGroups(playlist.url, type)
+            .onEach { groups ->
+                val allGroups = listOf("All") + groups
+                _uiState.value = _uiState.value.copy(categories = allGroups)
+            }
+            .launchIn(viewModelScope)
+    }
+
+    private fun loadChannels() {
+        val playlist = _uiState.value.selectedPlaylist ?: return
+        val type = _uiState.value.selectedTab
+        val category = _uiState.value.selectedCategory
+
+        contentJob?.cancel()
+        _uiState.value = _uiState.value.copy(isLoading = true)
+
+        if (type == StreamType.LIVE) {
+            // Live Channels have EPG Join
+            contentJob = repository.getLiveChannels(playlist.url, category)
+                .onEach { items ->
+                    _uiState.value = _uiState.value.copy(displayedChannels = items, isLoading = false)
+                }
+                .launchIn(viewModelScope)
+        } else {
+            // VOD (Movies/Series) - Simple Fetch, no EPG
+            contentJob = repository.getVodChannels(playlist.url, type.name, category)
+                .map { channels ->
+                    // Map simple Channel to ChannelWithProgram (program = null)
+                    channels.map { ChannelWithProgram(it, null) }
+                }
+                .onEach { items ->
+                    _uiState.value = _uiState.value.copy(displayedChannels = items, isLoading = false)
+                }
+                .launchIn(viewModelScope)
+        }
     }
 
     fun refreshContinueWatching() {
         val tab = _uiState.value.selectedTab
         viewModelScope.launch {
             try {
-                val progressList = repository.getContinueWatching(tab).first()
-                val progressChannels = progressList.mapNotNull { progress ->
-                    // FIX: Accessed 'channel.url' properly via the embedded object
-                    allChannels.find { it.channel.url == progress.channel.url }?.channel
+                repository.getContinueWatching(tab).collect { progressList ->
+                    // Extract channel objects from the Join
+                    val channels = progressList.map { it.channel }
+                    _uiState.value = _uiState.value.copy(continueWatching = channels)
                 }
-                _uiState.value = _uiState.value.copy(continueWatching = progressChannels)
             } catch (e: Exception) {
-                e.printStackTrace()
+                // Log or handle error
             }
         }
-    }
-
-    private fun refreshContent() {
-        val tab = _uiState.value.selectedTab
-
-        val tabChannels = allChannels.filter { it.channel.type == tab.name }
-
-        val categories = listOf("All") + tabChannels
-            .map { it.channel.group }
-            .distinct()
-            .sorted()
-
-        _uiState.value = _uiState.value.copy(
-            categories = categories,
-            isLoading = false
-        )
-
-        refreshContinueWatching()
-        filterChannels()
-    }
-
-    private fun filterChannels() {
-        val tab = _uiState.value.selectedTab
-        val category = _uiState.value.selectedCategory
-
-        val filtered = allChannels.filter { item ->
-            item.channel.type == tab.name &&
-                    (category == "All" || item.channel.group == category)
-        }
-
-        _uiState.value = _uiState.value.copy(displayedChannels = filtered)
     }
 
     fun backToPlaylists() {

@@ -29,7 +29,7 @@ import javax.inject.Singleton
 
 @Singleton
 class PrimeFlixRepository @Inject constructor(
-    private val database: PrimeFlixDatabase, // Required for Transactions
+    private val database: PrimeFlixDatabase,
     private val playlistDao: PlaylistDao,
     private val channelDao: ChannelDao,
     private val programmeDao: ProgrammeDao,
@@ -41,7 +41,7 @@ class PrimeFlixRepository @Inject constructor(
     private val feedbackManager: FeedbackManager
 ) {
 
-    // --- PLAYLISTS & CHANNELS ---
+    // --- PLAYLISTS ---
     val playlists = playlistDao.getAllPlaylists()
 
     suspend fun addPlaylist(title: String, url: String, source: DataSource) {
@@ -56,162 +56,138 @@ class PrimeFlixRepository @Inject constructor(
         programmeDao.deleteByPlaylist(playlist.url)
     }
 
+    // --- SYNC ENGINE (STAGED) ---
     suspend fun syncPlaylist(playlist: Playlist) = withContext(Dispatchers.IO) {
         try {
             val dataSource = DataSource.of(playlist.source)
 
-            val channels = when (dataSource) {
-                DataSource.Xtream -> fetchXtreamData(playlist)
-                DataSource.M3U -> fetchM3UData(playlist)
-                else -> emptyList()
+            feedbackManager.showLoading("Preparing...", "Removing Old Channels")
+            database.withTransaction {
+                channelDao.deleteByPlaylist(playlist.url)
             }
 
-            if (channels.isNotEmpty()) {
-                // Initial Feedback
-                feedbackManager.showLoading("Preparing Database...", "Cleaning up")
+            var hasChannels = false
+            if (dataSource == DataSource.Xtream) {
+                hasChannels = syncXtreamStaged(playlist)
+            } else if (dataSource == DataSource.M3U) {
+                hasChannels = syncM3U(playlist)
+            }
 
-                // TRANSACTION: Locks DB once, inserts everything, then unlocks.
-                // This makes saving 20k items take seconds instead of minutes.
-                database.withTransaction {
-                    channelDao.deleteByPlaylist(playlist.url)
-
-                    // Chunked Insert with Live Count Updates
-                    val batchSize = 2000
-                    val chunks = channels.chunked(batchSize)
-                    val totalItems = channels.size
-                    var itemsSaved = 0
-
-                    chunks.forEach { batch ->
-                        channelDao.insertAll(batch)
-                        itemsSaved += batch.size
-
-                        // UPDATE COUNT: "Importing: 2500 / 12000"
-                        feedbackManager.updateCount("Importing Channels...", "Database", itemsSaved, totalItems)
-                    }
-                }
-
-                Log.d("PrimeFlixRepo", "Synced ${channels.size} items for ${playlist.title}")
-
-                if (channels.any { it.type == StreamType.LIVE.name }) {
-                    syncEpg(playlist, dataSource)
-                }
-
+            if (hasChannels) {
+                syncEpg(playlist, dataSource)
                 feedbackManager.showSuccess("Playlist Synced Successfully!")
             } else {
                 feedbackManager.showError("No channels found in playlist.")
             }
+
         } catch (e: Exception) {
             Log.e("PrimeFlixRepo", "Error syncing playlist", e)
             feedbackManager.showError("Sync Failed: ${e.message}")
         }
     }
 
-    fun getChannels(playlistUrl: String) = channelDao.getChannelsByPlaylist(playlistUrl)
-
-    fun getChannelsWithEpg(playlistUrl: String): Flow<List<ChannelWithProgram>> {
-        return channelDao.getChannelsWithEpg(playlistUrl, System.currentTimeMillis())
-    }
-
-    fun searchChannels(query: String) = channelDao.searchChannels(query)
-
-    // --- FAVORITES ---
-    val favorites: Flow<List<Channel>> = channelDao.getFavorites()
-
-    suspend fun toggleFavorite(channel: Channel) {
-        channelDao.setFavorite(channel.url, !channel.isFavorite)
-    }
-
-    // --- WATCH HISTORY ---
-    fun getContinueWatching(type: StreamType) = watchProgressDao.getContinueWatching(type.name)
-
-    fun getRecentChannels() = watchProgressDao.getRecentChannels()
-
-    suspend fun saveProgress(url: String, position: Long, duration: Long) {
-        if (position < 5000) return
-        val progress = WatchProgress(
-            channelUrl = url,
-            position = position,
-            duration = duration,
-            lastPlayed = System.currentTimeMillis()
-        )
-        watchProgressDao.saveProgress(progress)
-    }
-
-    // --- EPG & METADATA ---
-    suspend fun getCurrentProgram(channelId: String) =
-        programmeDao.getCurrentProgram(channelId, System.currentTimeMillis())
-
-    suspend fun getProgrammesForChannel(channelId: String, start: Long, end: Long) =
-        programmeDao.getProgrammesForChannel(channelId, start, end)
-
-    suspend fun getSeriesEpisodes(playlistUrl: String, seriesId: Int) =
-        xtreamParser.getSeriesEpisodes(XtreamInput.decodeFromPlaylistUrl(playlistUrl), seriesId)
-
-    // --- PRIVATE FETCHERS ---
-    private suspend fun fetchXtreamData(playlist: Playlist): List<Channel> {
+    private suspend fun syncXtreamStaged(playlist: Playlist): Boolean {
         val input = XtreamInput.decodeFromPlaylistUrl(playlist.url)
-        val items = mutableListOf<Channel>()
+        var totalSaved = 0
 
+        // Live
         try {
-            val live = xtreamParser.getLiveStreams(input)
-            items.addAll(live.map {
-                Channel(
-                    playlistUrl = playlist.url,
-                    title = it.name.orEmpty(),
-                    group = it.categoryId ?: "Uncategorized",
-                    url = "${input.basicUrl}/live/${input.username}/${input.password}/${it.streamId}.ts",
-                    cover = it.streamIcon,
-                    type = StreamType.LIVE.name,
-                    relationId = it.epgChannelId,
-                    streamId = it.streamId.toString()
-                )
-            })
+            val liveItems = xtreamParser.getLiveStreams(input)
+            if (liveItems.isNotEmpty()) {
+                val channels = liveItems.map {
+                    Channel(
+                        playlistUrl = playlist.url,
+                        title = it.name.orEmpty(),
+                        group = it.categoryId ?: "Uncategorized",
+                        url = "${input.basicUrl}/live/${input.username}/${input.password}/${it.streamId}.ts",
+                        cover = it.streamIcon,
+                        type = StreamType.LIVE.name,
+                        relationId = it.epgChannelId,
+                        streamId = it.streamId.toString()
+                    )
+                }
+                saveBatch(channels, "Live Channels")
+                totalSaved += channels.size
+            }
         } catch (e: Exception) { Log.w("PrimeFlixRepo", "Xtream Live Failed", e) }
 
+        // Movies
         try {
-            val vods = xtreamParser.getVodStreams(input)
-            items.addAll(vods.map {
-                Channel(
-                    playlistUrl = playlist.url,
-                    title = it.name.orEmpty(),
-                    group = "Movies",
-                    url = "${input.basicUrl}/movie/${input.username}/${input.password}/${it.streamId}.${it.containerExtension}",
-                    cover = it.streamIcon,
-                    type = StreamType.MOVIE.name,
-                    streamId = it.streamId.toString()
-                )
-            })
+            val vodItems = xtreamParser.getVodStreams(input)
+            if (vodItems.isNotEmpty()) {
+                val channels = vodItems.map {
+                    Channel(
+                        playlistUrl = playlist.url,
+                        title = it.name.orEmpty(),
+                        group = "Movies",
+                        url = "${input.basicUrl}/movie/${input.username}/${input.password}/${it.streamId}.${it.containerExtension}",
+                        cover = it.streamIcon,
+                        type = StreamType.MOVIE.name,
+                        streamId = it.streamId.toString()
+                    )
+                }
+                saveBatch(channels, "Movies")
+                totalSaved += channels.size
+            }
         } catch (e: Exception) { Log.w("PrimeFlixRepo", "Xtream VOD Failed", e) }
 
+        // Series
         try {
-            val series = xtreamParser.getSeries(input)
-            items.addAll(series.map {
-                Channel(
-                    playlistUrl = playlist.url,
-                    title = it.name.orEmpty(),
-                    group = "Series",
-                    url = "",
-                    cover = it.cover,
-                    type = StreamType.SERIES.name,
-                    streamId = it.seriesId.toString()
-                )
-            })
+            val seriesItems = xtreamParser.getSeries(input)
+            if (seriesItems.isNotEmpty()) {
+                val channels = seriesItems.map {
+                    Channel(
+                        playlistUrl = playlist.url,
+                        title = it.name.orEmpty(),
+                        group = "Series",
+                        url = "",
+                        cover = it.cover,
+                        type = StreamType.SERIES.name,
+                        streamId = it.seriesId.toString()
+                    )
+                }
+                saveBatch(channels, "Series")
+                totalSaved += channels.size
+            }
         } catch (e: Exception) { Log.w("PrimeFlixRepo", "Xtream Series Failed", e) }
 
-        return items
+        return totalSaved > 0
     }
 
-    private suspend fun fetchM3UData(playlist: Playlist): List<Channel> {
-        feedbackManager.showLoading("Downloading Playlist...", "M3U File")
-        val request = Request.Builder().url(playlist.url).build()
-        val response = okHttpClient.newCall(request).execute()
-        val inputStream = response.body?.byteStream() ?: return emptyList()
+    private suspend fun saveBatch(channels: List<Channel>, typeLabel: String) {
+        if (channels.isEmpty()) return
+        feedbackManager.showLoading("Processing...", "Saving $typeLabel")
 
-        val items = mutableListOf<Channel>()
-        m3uParser.parse(inputStream).collect { m3u ->
-            items.add(m3u.toChannel(playlist.url))
+        val batchSize = 1000
+        val chunks = channels.chunked(batchSize)
+        val totalItems = channels.size
+        var itemsSaved = 0
+
+        database.withTransaction {
+            chunks.forEach { batch ->
+                channelDao.insertAll(batch)
+                itemsSaved += batch.size
+                feedbackManager.updateCount("Saving $typeLabel...", "Database", itemsSaved, totalItems)
+            }
         }
-        return items
+    }
+
+    private suspend fun syncM3U(playlist: Playlist): Boolean {
+        feedbackManager.showLoading("Downloading Playlist...", "M3U File")
+        try {
+            val request = Request.Builder().url(playlist.url).build()
+            val response = okHttpClient.newCall(request).execute()
+            val inputStream = response.body?.byteStream() ?: return false
+
+            val items = mutableListOf<Channel>()
+            m3uParser.parse(inputStream).collect { m3u -> items.add(m3u.toChannel(playlist.url)) }
+
+            if (items.isNotEmpty()) {
+                saveBatch(items, "M3U Channels")
+                return true
+            }
+        } catch (e: Exception) { Log.e("PrimeFlixRepo", "M3U Fetch Failed", e) }
+        return false
     }
 
     private suspend fun syncEpg(playlist: Playlist, dataSource: DataSource) {
@@ -237,4 +213,47 @@ class PrimeFlixRepository @Inject constructor(
             }
         } catch (e: Exception) { Log.e("PrimeFlixRepo", "EPG Sync Failed", e) }
     }
+
+    // --- DATA ACCESSORS (OPTIMIZED) ---
+    fun getGroups(playlistUrl: String, type: String) = channelDao.getGroups(playlistUrl, type)
+
+    fun getLiveChannels(playlistUrl: String, group: String) =
+        channelDao.getLiveChannels(playlistUrl, group, System.currentTimeMillis())
+
+    fun getVodChannels(playlistUrl: String, type: String, group: String) =
+        channelDao.getVodChannels(playlistUrl, type, group)
+
+    fun searchChannels(query: String) = channelDao.searchChannels(query)
+
+    // --- FAVORITES & HISTORY ---
+    val favorites: Flow<List<Channel>> = channelDao.getFavorites()
+
+    suspend fun toggleFavorite(channel: Channel) {
+        channelDao.setFavorite(channel.url, !channel.isFavorite)
+    }
+
+    // Pass-through: ViewModel maps this
+    fun getContinueWatching(type: StreamType) = watchProgressDao.getContinueWatching(type.name)
+
+    fun getRecentChannels() = watchProgressDao.getRecentChannels()
+
+    suspend fun saveProgress(url: String, position: Long, duration: Long) {
+        if (position < 5000) return
+        val progress = WatchProgress(
+            channelUrl = url,
+            position = position,
+            duration = duration,
+            lastPlayed = System.currentTimeMillis()
+        )
+        watchProgressDao.saveProgress(progress)
+    }
+
+    suspend fun getCurrentProgram(channelId: String) =
+        programmeDao.getCurrentProgram(channelId, System.currentTimeMillis())
+
+    suspend fun getProgrammesForChannel(channelId: String, start: Long, end: Long) =
+        programmeDao.getProgrammesForChannel(channelId, start, end)
+
+    suspend fun getSeriesEpisodes(playlistUrl: String, seriesId: Int) =
+        xtreamParser.getSeriesEpisodes(XtreamInput.decodeFromPlaylistUrl(playlistUrl), seriesId)
 }

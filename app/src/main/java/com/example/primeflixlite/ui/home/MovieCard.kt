@@ -34,6 +34,9 @@ import coil.request.ImageRequest
 import com.example.primeflixlite.data.local.entity.Channel
 import com.example.primeflixlite.ui.theme.NeonBlue
 
+// Hoist shape to avoid allocation on every recomposition
+private val CardShape = RoundedCornerShape(8.dp)
+
 @Composable
 fun MovieCard(
     channel: Channel,
@@ -41,9 +44,10 @@ fun MovieCard(
     onClick: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
-    // Visual Feedback (Scale)
-    val scale = if (isFocused) 1.08f else 1f
+    // Visual Feedback (Scale) - Reduced scale slightly for smoother animation on low-end
+    val scale = if (isFocused) 1.05f else 1f
 
     // OPTIMIZATION: Memoize the gradient to prevent object creation during scroll
     val gradient = remember {
@@ -53,13 +57,24 @@ fun MovieCard(
         )
     }
 
+    // OPTIMIZATION: Memoize the ImageRequest
+    val imageRequest = remember(channel.cover) {
+        ImageRequest.Builder(context)
+            .data(channel.cover)
+            // Resize is CRITICAL for low RAM devices.
+            // 300x450 is plenty for a grid card.
+            .size(300, 450)
+            .crossfade(false) // Disable crossfade for performance
+            .build()
+    }
+
     Box(
         modifier = Modifier
             .scale(scale)
             .aspectRatio(2f / 3f)
-            .clip(RoundedCornerShape(8.dp))
-            // OPTIMIZATION: Only apply border logic if focused (avoids drawing transparent borders)
-            .then(if (isFocused) Modifier.border(BorderStroke(2.dp, NeonBlue), RoundedCornerShape(8.dp)) else Modifier)
+            .clip(CardShape)
+            // OPTIMIZATION: Only apply border logic if focused
+            .then(if (isFocused) Modifier.border(BorderStroke(2.dp, NeonBlue), CardShape) else Modifier)
             .background(Color(0xFF1E1E1E))
             .clickable { onClick() }
             .onFocusChanged { isFocused = it.isFocused }
@@ -67,11 +82,7 @@ fun MovieCard(
     ) {
         if (!channel.cover.isNullOrEmpty()) {
             AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(channel.cover)
-                    // OPTIMIZATION: Removed crossfade here (handled globally or disabled for performance)
-                    .size(300, 450)
-                    .build(),
+                model = imageRequest,
                 imageLoader = imageLoader,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
@@ -95,7 +106,7 @@ fun MovieCard(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(gradient) // Use cached gradient
+                    .background(gradient)
             ) {
                 Text(
                     text = channel.title,

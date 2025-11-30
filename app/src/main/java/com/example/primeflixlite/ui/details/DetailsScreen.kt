@@ -46,6 +46,7 @@ fun DetailsScreen(
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
 
     LaunchedEffect(channel) {
         viewModel.loadContent(channel)
@@ -53,11 +54,37 @@ fun DetailsScreen(
 
     BackHandler { onBack() }
 
+    // PERFORMANCE: Hoist gradients
+    val backdropGradient = remember {
+        Brush.verticalGradient(
+            colors = listOf(Color.Transparent, VoidBlack),
+            startY = 0f,
+            endY = Float.POSITIVE_INFINITY // Will be adjusted in drawWithContent if needed, but simple linear is usually fine
+        )
+    }
+
+    // PERFORMANCE: Resize backdrop
+    val backdropRequest = remember(channel.cover) {
+        ImageRequest.Builder(context)
+            .data(channel.cover)
+            .size(1280, 720) // Critical for 1GB RAM
+            .crossfade(false)
+            .build()
+    }
+
+    // PERFORMANCE: Resize poster
+    val posterRequest = remember(channel.cover) {
+        ImageRequest.Builder(context)
+            .data(channel.cover)
+            .size(400, 600)
+            .build()
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(VoidBlack)) {
         // --- BACKDROP ---
         if (!channel.cover.isNullOrEmpty()) {
             AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current).data(channel.cover).crossfade(true).build(),
+                model = backdropRequest,
                 imageLoader = imageLoader,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
@@ -88,7 +115,7 @@ fun DetailsScreen(
                 ) {
                     if (!channel.cover.isNullOrEmpty()) {
                         AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current).data(channel.cover).build(),
+                            model = posterRequest,
                             imageLoader = imageLoader,
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
@@ -113,7 +140,6 @@ fun DetailsScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // FIX: Compare String name to Enum name
                 if (channel.type == StreamType.MOVIE.name) {
                     PlayButton(
                         onClick = { onPlayClick(channel.url) },
@@ -122,7 +148,6 @@ fun DetailsScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(text = "Group: ${channel.group}", color = Color.Gray)
                 }
-                // FIX: Compare String name to Enum name
                 else if (channel.type == StreamType.SERIES.name) {
                     if (uiState.isLoading) {
                         CircularProgressIndicator(color = NeonBlue)
@@ -150,11 +175,14 @@ fun DetailsScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             contentPadding = PaddingValues(bottom = 32.dp)
                         ) {
-                            items(viewModel.getEpisodesForSeason(viewModel.selectedSeason)) { episode ->
+                            // OPTIMIZATION: Use key for efficient recomposition
+                            items(
+                                items = viewModel.getEpisodesForSeason(viewModel.selectedSeason),
+                                key = { it.id ?: it.hashCode() }
+                            ) { episode ->
                                 EpisodeRow(
                                     episode = episode,
                                     onClick = {
-                                        // FIX: Use camelCase containerExtension from data class
                                         val ext = episode.containerExtension ?: "mkv"
                                         val url = "${channel.url.substringBefore("/series/")}/series/${channel.url.split("/")[4]}/${channel.url.split("/")[5]}/${episode.id}.$ext"
                                         onPlayClick(url)
@@ -214,13 +242,11 @@ fun EpisodeRow(episode: XtreamChannelInfo.Episode, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            // FIX: Use camelCase episodeNum
             text = "${episode.episodeNum}",
             color = NeonBlue,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.width(40.dp)
         )
-        // FIX: Use camelCase episodeNum
         Text(text = episode.title ?: "Episode ${episode.episodeNum}", color = White)
     }
 }

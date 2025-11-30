@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ChannelDao {
+    // --- LEGACY / UTILS ---
     @Query("SELECT * FROM streams WHERE playlist_url = :playlistUrl ORDER BY `group`, title")
     fun getChannelsByPlaylist(playlistUrl: String): Flow<List<Channel>>
 
@@ -28,8 +29,14 @@ interface ChannelDao {
     @Query("UPDATE streams SET is_favorite = :isFav WHERE url = :url")
     suspend fun setFavorite(url: String, isFav: Boolean)
 
-    // This query joins the streams table with the programmes table
-    // It uses specific column aliases (prog_*) that map to the embedded Programme object
+    // --- OPTIMIZED QUERIES FOR HOME SCREEN ---
+
+    // 1. Get Categories (Groups) dynamically based on selected Tab (Type)
+    @Query("SELECT DISTINCT `group` FROM streams WHERE playlist_url = :url AND type = :type ORDER BY `group` ASC")
+    fun getGroups(url: String, type: String): Flow<List<String>>
+
+    // 2. LIVE TV: Fetches Channels + EPG (Joined)
+    // Filters by Group at SQL level to avoid memory overhead
     @Transaction
     @Query("""
         SELECT c.*, 
@@ -44,19 +51,29 @@ interface ChannelDao {
         FROM streams c
         LEFT JOIN programmes p ON c.relation_id = p.channel_id 
         AND :nowMillis >= p.start AND :nowMillis < p.`end`
-        WHERE c.playlist_url = :playlistUrl
+        WHERE c.playlist_url = :url 
+        AND c.type = 'LIVE'
+        AND (:group = 'All' OR c.`group` = :group)
+        ORDER BY c.title ASC
     """)
-    fun getChannelsWithEpg(playlistUrl: String, nowMillis: Long): Flow<List<ChannelWithProgram>>
+    fun getLiveChannels(url: String, group: String, nowMillis: Long): Flow<List<ChannelWithProgram>>
+
+    // 3. VOD (Movies/Series): Fetches Channels ONLY (No EPG Join needed)
+    // Much lighter query for large VOD libraries
+    @Query("""
+        SELECT * FROM streams 
+        WHERE playlist_url = :url 
+        AND type = :type 
+        AND (:group = 'All' OR `group` = :group)
+        ORDER BY title ASC
+    """)
+    fun getVodChannels(url: String, type: String, group: String): Flow<List<Channel>>
+
+    // --- WRITE OPERATIONS ---
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(channels: List<Channel>)
 
     @Query("DELETE FROM streams WHERE playlist_url = :playlistUrl")
     suspend fun deleteByPlaylist(playlistUrl: String)
-
-    @Transaction
-    suspend fun replacePlaylistChannels(playlistUrl: String, channels: List<Channel>) {
-        deleteByPlaylist(playlistUrl)
-        insertAll(channels)
-    }
 }

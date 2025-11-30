@@ -1,7 +1,6 @@
 package com.example.primeflixlite.ui.search
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -104,7 +103,7 @@ fun SearchScreen(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(bottom = 32.dp)
             ) {
-                items(uiState.results) { channel ->
+                items(uiState.results, key = { it.url }) { channel ->
                     SearchResultCard(
                         channel = channel,
                         imageLoader = imageLoader,
@@ -116,16 +115,29 @@ fun SearchScreen(
     }
 }
 
+// Hoist shape
+private val CardShape = RoundedCornerShape(8.dp)
+
 @Composable
 fun SearchResultCard(channel: Channel, imageLoader: coil.ImageLoader, onClick: () -> Unit) {
     var isFocused by remember { mutableStateOf(false) }
     val borderColor = if (isFocused) NeonBlue else Color.Transparent
+    val context = LocalContext.current
+
+    // OPTIMIZATION: Memoize image request
+    val imageRequest = remember(channel.cover) {
+        ImageRequest.Builder(context)
+            .data(channel.cover)
+            .size(220, 330) // ~140dp width
+            .crossfade(false)
+            .build()
+    }
 
     Column(
         modifier = Modifier
             .width(140.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .border(2.dp, borderColor, RoundedCornerShape(8.dp))
+            .clip(CardShape)
+            .border(2.dp, borderColor, CardShape)
             .background(Color(0xFF1E1E1E))
             .clickable { onClick() }
             .onFocusChanged { isFocused = it.isFocused }
@@ -135,7 +147,7 @@ fun SearchResultCard(channel: Channel, imageLoader: coil.ImageLoader, onClick: (
         Box(modifier = Modifier.aspectRatio(2f/3f).background(Color.Black)) {
             if (!channel.cover.isNullOrEmpty()) {
                 AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current).data(channel.cover).crossfade(true).build(),
+                    model = imageRequest,
                     imageLoader = imageLoader,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
@@ -151,7 +163,6 @@ fun SearchResultCard(channel: Channel, imageLoader: coil.ImageLoader, onClick: (
                 }
             }
             // Type Badge
-            // FIX: Use when on String type with exhaustive else
             val badgeColor = when(channel.type) {
                 StreamType.LIVE.name -> Color.Red
                 StreamType.MOVIE.name -> NeonBlue
@@ -165,7 +176,6 @@ fun SearchResultCard(channel: Channel, imageLoader: coil.ImageLoader, onClick: (
                     .padding(horizontal = 6.dp, vertical = 2.dp)
             ) {
                 Text(
-                    // FIX: type is already String, no .name needed
                     text = channel.type.take(1),
                     color = Color.Black,
                     fontSize = 10.sp,

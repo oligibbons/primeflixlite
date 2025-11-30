@@ -18,7 +18,7 @@ data class SearchUiState(
     val query: String = "",
     val results: List<Channel> = emptyList(),
     val isLoading: Boolean = false,
-    val hasSearched: Boolean = false // To distinguish "empty start" vs "no results found"
+    val hasSearched: Boolean = false
 )
 
 @HiltViewModel
@@ -29,7 +29,6 @@ class SearchViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(SearchUiState())
     val uiState = _uiState.asStateFlow()
 
-    // Internal flow for typing debounce
     private val searchFlow = MutableStateFlow("")
 
     init {
@@ -40,7 +39,7 @@ class SearchViewModel @Inject constructor(
     private fun observeSearch() {
         viewModelScope.launch {
             searchFlow
-                .debounce(500) // Wait 500ms after last keystroke
+                .debounce(600) // Increased slightly for slower typing on remote
                 .distinctUntilChanged()
                 .filter { it.isNotBlank() }
                 .collect { query ->
@@ -50,13 +49,9 @@ class SearchViewModel @Inject constructor(
     }
 
     fun onQueryChange(newQuery: String) {
-        // Update UI immediately for the text field
         _uiState.value = _uiState.value.copy(query = newQuery)
-
-        // Push to debouncer
         searchFlow.value = newQuery
 
-        // Clear results if empty
         if (newQuery.isBlank()) {
             _uiState.value = _uiState.value.copy(results = emptyList(), hasSearched = false)
         }
@@ -66,8 +61,7 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
             try {
-                // The repository search is typically exact or LIKE %query%
-                // We fetch everything matching the string
+                // DAO limits this to 50 items, safe for memory
                 repository.searchChannels(query).collect { hits ->
                     _uiState.value = _uiState.value.copy(
                         results = hits,
@@ -76,7 +70,6 @@ class SearchViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
-                // Handle error smoothly
                 _uiState.value = _uiState.value.copy(isLoading = false, results = emptyList())
             }
         }

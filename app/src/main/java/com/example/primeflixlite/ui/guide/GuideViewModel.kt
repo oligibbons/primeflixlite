@@ -2,25 +2,22 @@ package com.example.primeflixlite.ui.guide
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.primeflixlite.data.local.entity.Channel
-import com.example.primeflixlite.data.local.entity.Programme
-import com.example.primeflixlite.data.local.entity.StreamType
+import com.example.primeflixlite.data.local.entity.Playlist
+import com.example.primeflixlite.data.local.model.ChannelWithProgram
 import com.example.primeflixlite.data.repository.PrimeFlixRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class GuideItem(
-    val channel: Channel,
-    val programs: List<Programme> = emptyList()
-)
-
 data class GuideUiState(
-    val isLoading: Boolean = true,
-    val channels: List<GuideItem> = emptyList()
+    val channels: List<ChannelWithProgram> = emptyList(),
+    val currentGroup: String = "All",
+    val isLoading: Boolean = true
 )
 
 @HiltViewModel
@@ -31,34 +28,40 @@ class GuideViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(GuideUiState())
     val uiState = _uiState.asStateFlow()
 
+    private var contentJob: Job? = null
+    private var clockJob: Job? = null
+
     init {
-        loadGuide()
+        // Start a clock to refresh UI (progress bars) every minute
+        startClock()
     }
 
-    private fun loadGuide() {
-        viewModelScope.launch {
-            repository.playlists.collectLatest { playlists ->
-                val activePlaylist = playlists.firstOrNull()
-                if (activePlaylist != null) {
-                    repository.getChannelsWithEpg(activePlaylist.url).collect { channelsWithEpg ->
-                        val items = channelsWithEpg
-                            .filter { it.channel.type == StreamType.LIVE.name }
-                            .map {
-                                GuideItem(
-                                    channel = it.channel,
-                                    // FIX: Use .program (from ChannelWithProgram), not .currentProgram
-                                    programs = it.program?.let { p -> listOf(p) } ?: emptyList()
-                                )
-                            }
+    fun loadGuide(playlist: Playlist, group: String) {
+        _uiState.value = _uiState.value.copy(currentGroup = group, isLoading = true)
 
-                        _uiState.value = GuideUiState(
-                            isLoading = false,
-                            channels = items
-                        )
-                    }
-                } else {
-                    _uiState.value = GuideUiState(isLoading = false)
+        contentJob?.cancel()
+        contentJob = viewModelScope.launch {
+            // OPTIMIZATION: Use the SQL-level JOIN we added to ChannelDao.
+            // This is much faster than loading all channels and joining in Kotlin.
+            repository.getLiveChannels(playlist.url, group)
+                .collect { items ->
+                    _uiState.value = _uiState.value.copy(
+                        channels = items,
+                        isLoading = false
+                    )
                 }
+        }
+    }
+
+    private fun startClock() {
+        clockJob = viewModelScope.launch {
+            while (isActive) {
+                delay(60_000) // Update every minute
+                // Trigger a UI update by re-emitting state (if needed)
+                // In this simple architecture, Composable reads system time for progress,
+                // but re-emitting helps ensures sync.
+                val current = _uiState.value
+                _uiState.value = current.copy()
             }
         }
     }

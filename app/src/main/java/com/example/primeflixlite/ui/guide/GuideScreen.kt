@@ -1,29 +1,37 @@
 package com.example.primeflixlite.ui.guide
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.ImageLoader
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.primeflixlite.data.local.entity.Channel
-import com.example.primeflixlite.data.local.entity.Programme
+import com.example.primeflixlite.data.local.model.ChannelWithProgram
 import com.example.primeflixlite.ui.theme.NeonBlue
 import com.example.primeflixlite.ui.theme.VoidBlack
 import com.example.primeflixlite.ui.theme.White
@@ -32,35 +40,69 @@ import com.example.primeflixlite.util.TimeUtils
 @Composable
 fun GuideScreen(
     viewModel: GuideViewModel,
-    imageLoader: ImageLoader,
+    imageLoader: coil.ImageLoader,
     onChannelClick: (Channel) -> Unit,
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val listFocusRequester = remember { FocusRequester() }
 
-    Column(modifier = Modifier.fillMaxSize().background(VoidBlack)) {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = White)
-            }
-            Text("TV Guide", style = MaterialTheme.typography.titleLarge, color = White)
+    BackHandler { onBack() }
+
+    // Auto-focus list when loaded
+    LaunchedEffect(uiState.isLoading) {
+        if (!uiState.isLoading && uiState.channels.isNotEmpty()) {
+            listFocusRequester.requestFocus()
         }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(VoidBlack)
+            .padding(24.dp)
+    ) {
+        // --- HEADER ---
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(bottom = 24.dp)
+        ) {
+            Icon(Icons.Default.List, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(32.dp))
+            Spacer(Modifier.width(16.dp))
+            Text("TV Guide", style = MaterialTheme.typography.headlineMedium, color = White, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.weight(1f))
+            Text(TimeUtils.getCurrentTimeFormatted(), color = Color.Gray, style = MaterialTheme.typography.titleMedium)
+        }
+
+        // --- CATEGORY TABS ---
+        // (Simplified: Just Horizontal Scroll of Groups)
+        // For performance, we might just stick to the filtered list from Home,
+        // but here is a simple group selector if needed.
+        // For now, let's assume it shows the current group passed from Home.
+        Text(
+            text = "Group: ${uiState.currentGroup}",
+            color = NeonBlue,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
 
         if (uiState.isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = NeonBlue)
             }
         } else {
-            // EPG Grid
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(uiState.channels) { item ->
-                    GuideChannelRow(
-                        channel = item.channel,
-                        programs = item.programs,
+            // --- CHANNEL LIST ---
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(bottom = 32.dp),
+                modifier = Modifier.focusRequester(listFocusRequester)
+            ) {
+                items(
+                    items = uiState.channels,
+                    key = { it.channel.id } // CRITICAL for performance
+                ) { item ->
+                    GuideRow(
+                        item = item,
                         imageLoader = imageLoader,
                         onClick = { onChannelClick(item.channel) }
                     )
@@ -71,93 +113,108 @@ fun GuideScreen(
 }
 
 @Composable
-fun GuideChannelRow(
-    channel: Channel,
-    programs: List<Programme>,
-    imageLoader: ImageLoader,
+fun GuideRow(
+    item: ChannelWithProgram,
+    imageLoader: coil.ImageLoader,
     onClick: () -> Unit
 ) {
+    var isFocused by remember { mutableStateOf(false) }
+    val borderColor = if (isFocused) NeonBlue else Color.Transparent
+    val backgroundColor = if (isFocused) Color(0xFF252525) else Color(0xFF151515)
+
+    val channel = item.channel
+    val program = item.program
+
+    // OPTIMIZATION: Memoize image request
+    val context = LocalContext.current
+    val imageRequest = remember(channel.cover) {
+        ImageRequest.Builder(context)
+            .data(channel.cover)
+            .size(100, 100) // Small icon
+            .crossfade(false)
+            .build()
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(80.dp)
-            .border(0.5.dp, Color.DarkGray)
+            .clip(RoundedCornerShape(8.dp))
+            .border(2.dp, borderColor, RoundedCornerShape(8.dp))
+            .background(backgroundColor)
             .clickable { onClick() }
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        // Channel Icon/Name
+        // 1. Channel Icon
         Box(
             modifier = Modifier
-                .width(100.dp)
-                .fillMaxHeight()
-                .background(Color(0xFF1E1E1E))
-                .padding(8.dp),
+                .size(64.dp)
+                .background(Color.Black, RoundedCornerShape(4.dp))
+                .padding(4.dp),
             contentAlignment = Alignment.Center
         ) {
             if (!channel.cover.isNullOrEmpty()) {
                 AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current).data(channel.cover).build(),
+                    model = imageRequest,
                     imageLoader = imageLoader,
                     contentDescription = null,
-                    modifier = Modifier.size(50.dp)
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
                 )
             } else {
-                Text(
-                    text = channel.title.take(3),
-                    color = Color.Gray,
-                    fontWeight = FontWeight.Bold
-                )
+                Text(channel.title.take(1), color = Color.Gray, fontWeight = FontWeight.Bold)
             }
         }
 
-        // Programs Timeline
-        LazyRow(
-            modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.spacedBy(1.dp)
-        ) {
-            items(programs) { program ->
-                GuideProgramCard(program)
-            }
-            if (programs.isEmpty()) {
-                item {
-                    Box(modifier = Modifier.width(300.dp).fillMaxHeight().padding(16.dp)) {
-                        Text("No Information", color = Color.Gray)
-                    }
+        Spacer(Modifier.width(16.dp))
+
+        // 2. Channel Name
+        Text(
+            text = channel.title,
+            color = if (isFocused) White else Color.LightGray,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.width(180.dp),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        Spacer(Modifier.width(16.dp))
+
+        // 3. Program Info (Current)
+        Column(modifier = Modifier.weight(1f)) {
+            if (program != null) {
+                Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = program.title,
+                        color = White,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = TimeUtils.formatTime(program.start),
+                        color = NeonBlue,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
+
+                Spacer(Modifier.height(8.dp))
+
+                // Progress Bar
+                LinearProgressIndicator(
+                    progress = { TimeUtils.getProgress(program.start, program.end) },
+                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                    color = NeonBlue,
+                    trackColor = Color.DarkGray,
+                )
+            } else {
+                Text("No Program Information", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
             }
-        }
-    }
-}
-
-@Composable
-fun GuideProgramCard(program: Programme) {
-    // 1 hour = 200.dp width roughly
-    val durationMillis = program.end - program.start
-    val durationHours = durationMillis / (1000.0 * 60 * 60)
-    // FIX: Convert to Float for dp calculation
-    val width = (durationHours * 200).toFloat().coerceAtLeast(50f).dp
-
-    Box(
-        modifier = Modifier
-            .width(width)
-            .fillMaxHeight()
-            .background(Color(0xFF2A2A2A))
-            .padding(4.dp)
-            .border(0.5.dp, Color.Black)
-    ) {
-        Column {
-            Text(
-                text = program.title,
-                color = White,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = "${TimeUtils.formatTime(program.start)} - ${TimeUtils.formatTime(program.end)}",
-                color = NeonBlue,
-                style = MaterialTheme.typography.labelSmall,
-                maxLines = 1
-            )
         }
     }
 }

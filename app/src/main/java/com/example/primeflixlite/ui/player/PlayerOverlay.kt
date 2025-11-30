@@ -60,6 +60,13 @@ fun PlayerOverlay(
         }
     }
 
+    // PERFORMANCE: Hoist gradient
+    val overlayGradient = remember {
+        Brush.verticalGradient(
+            colors = listOf(Color.Black.copy(alpha = 0.8f), Color.Transparent, Color.Black.copy(alpha = 0.9f))
+        )
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -94,11 +101,9 @@ fun PlayerOverlay(
             modifier = Modifier.fillMaxSize()
         ) {
             Box(
-                modifier = Modifier.fillMaxSize().background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Black.copy(alpha = 0.8f), Color.Transparent, Color.Black.copy(alpha = 0.9f))
-                    )
-                )
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(overlayGradient)
             ) {
                 // TOP BAR
                 Row(modifier = Modifier.fillMaxWidth().padding(32.dp), verticalAlignment = Alignment.CenterVertically) {
