@@ -39,27 +39,23 @@ import com.example.primeflixlite.ui.theme.White
 
 @Composable
 fun DetailsScreen(
-    channel: Channel, // Placeholder passed from Nav
+    channel: Channel,
     viewModel: DetailsViewModel,
     imageLoader: coil.ImageLoader,
     onPlayClick: (String) -> Unit,
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    // FIX: Observe the LIVE data from ViewModel
     val liveChannel by viewModel.currentChannel.collectAsState()
-
-    // Use live data if available, otherwise fallback to placeholder
     val displayChannel = liveChannel ?: channel
+    val context = LocalContext.current
 
-    // Trigger load if we only have the placeholder
     LaunchedEffect(channel) {
         viewModel.loadContent(channel)
     }
 
     BackHandler { onBack() }
 
-    // PERFORMANCE: Hoist gradients
     val backdropGradient = remember {
         Brush.verticalGradient(
             colors = listOf(Color.Transparent, VoidBlack),
@@ -68,24 +64,23 @@ fun DetailsScreen(
         )
     }
 
-    // PERFORMANCE: Resize backdrop
+    // FIX: Using 'context' variable instead of calling LocalContext.current inside remember
     val backdropRequest = remember(displayChannel.cover) {
-        ImageRequest.Builder(LocalContext.current)
+        ImageRequest.Builder(context)
             .data(displayChannel.cover)
             .size(1280, 720)
-            .crossfade(true)
+            .crossfade(false)
             .build()
     }
 
     val posterRequest = remember(displayChannel.cover) {
-        ImageRequest.Builder(LocalContext.current)
+        ImageRequest.Builder(context)
             .data(displayChannel.cover)
             .size(400, 600)
             .build()
     }
 
     Box(modifier = Modifier.fillMaxSize().background(VoidBlack)) {
-        // --- BACKDROP ---
         if (!displayChannel.cover.isNullOrEmpty()) {
             AsyncImage(
                 model = backdropRequest,
@@ -102,9 +97,7 @@ fun DetailsScreen(
             )
         }
 
-        // --- CONTENT ---
         Row(modifier = Modifier.fillMaxSize().padding(40.dp)) {
-            // LEFT: Poster
             Column(modifier = Modifier.width(300.dp)) {
                 Card(
                     shape = RoundedCornerShape(12.dp),
@@ -120,21 +113,13 @@ fun DetailsScreen(
                             contentScale = ContentScale.Crop
                         )
                     } else {
-                        Box(Modifier.fillMaxSize().background(Color.DarkGray), contentAlignment = Alignment.Center) {
-                            // Show loading text only if truly loading
-                            if (displayChannel.title == "Loading...") {
-                                CircularProgressIndicator(color = NeonBlue)
-                            } else {
-                                Text(displayChannel.title.take(1), style = MaterialTheme.typography.displayMedium)
-                            }
-                        }
+                        Box(Modifier.fillMaxSize().background(Color.DarkGray))
                     }
                 }
             }
 
             Spacer(modifier = Modifier.width(32.dp))
 
-            // RIGHT: Metadata & Episodes
             Column(modifier = Modifier.fillMaxSize()) {
                 Text(
                     text = displayChannel.title,
@@ -157,7 +142,6 @@ fun DetailsScreen(
                     if (uiState.isLoading) {
                         CircularProgressIndicator(color = NeonBlue)
                     } else if (uiState.episodes.isNotEmpty()) {
-                        // Season Selector
                         val seasons = viewModel.getSeasons()
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(seasons) { seasonNum ->
@@ -175,7 +159,6 @@ fun DetailsScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Episode List
                         LazyColumn(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             contentPadding = PaddingValues(bottom = 32.dp)

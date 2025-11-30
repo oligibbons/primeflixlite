@@ -15,15 +15,15 @@ interface ProgrammeDao {
     @Query("DELETE FROM programmes WHERE playlist_url = :playlistUrl")
     suspend fun deleteByPlaylist(playlistUrl: String)
 
-    // Delete programs that have ended before the current time (Keep DB small)
+    // Delete programs that have ended before the current time
     @Query("DELETE FROM programmes WHERE `end` < :currentTimeMillis")
     suspend fun deleteOldProgrammes(currentTimeMillis: Long)
 
-    // Get the currently playing program for a specific channel
+    // Get the currently playing program
     @Query("SELECT * FROM programmes WHERE channel_id = :channelId AND start <= :now AND `end` > :now LIMIT 1")
     suspend fun getCurrentProgram(channelId: String, now: Long): Programme?
 
-    // Get timeline for a channel (e.g. for a detailed guide view)
-    @Query("SELECT * FROM programmes WHERE channel_id = :channelId AND `end` > :start ORDER BY start ASC")
+    // FIX: Added "AND start < :end" to use the unused parameter and correctly filter the timeline
+    @Query("SELECT * FROM programmes WHERE channel_id = :channelId AND `end` > :start AND start < :end ORDER BY start ASC")
     suspend fun getProgrammesForChannel(channelId: String, start: Long, end: Long): List<Programme>
 }

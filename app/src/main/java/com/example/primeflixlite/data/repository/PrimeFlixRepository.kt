@@ -12,7 +12,6 @@ import com.example.primeflixlite.data.local.entity.DataSource
 import com.example.primeflixlite.data.local.entity.Playlist
 import com.example.primeflixlite.data.local.entity.StreamType
 import com.example.primeflixlite.data.local.entity.WatchProgress
-import com.example.primeflixlite.data.local.model.ChannelWithProgram
 import com.example.primeflixlite.data.parser.m3u.M3UParser
 import com.example.primeflixlite.data.parser.m3u.toChannel
 import com.example.primeflixlite.data.parser.xmltv.XmltvParser
@@ -21,11 +20,9 @@ import com.example.primeflixlite.data.parser.xtream.XtreamParser
 import com.example.primeflixlite.util.FeedbackManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -41,12 +38,11 @@ class PrimeFlixRepository @Inject constructor(
     private val xmltvParser: XmltvParser,
     private val okHttpClient: OkHttpClient,
     private val feedbackManager: FeedbackManager,
-    private val externalScope: CoroutineScope // Application Scope
+    private val externalScope: CoroutineScope
 ) {
 
     val playlists = playlistDao.getAllPlaylists()
 
-    // Now returns immediately, work happens in background
     fun addPlaylist(title: String, url: String, source: DataSource) {
         externalScope.launch {
             val playlist = Playlist(title = title, url = url, source = source.value)
@@ -61,14 +57,12 @@ class PrimeFlixRepository @Inject constructor(
         programmeDao.deleteByPlaylist(playlist.url)
     }
 
-    // FIRE AND FORGET: Launches on App Scope
     fun syncPlaylist(playlist: Playlist) {
         externalScope.launch {
             doSyncWork(playlist)
         }
     }
 
-    // INTERNAL WORKER
     private suspend fun doSyncWork(playlist: Playlist) = withContext(Dispatchers.IO) {
         try {
             feedbackManager.showLoading("Connecting...", "Initializing")
@@ -200,7 +194,7 @@ class PrimeFlixRepository @Inject constructor(
     private suspend fun syncM3U(playlist: Playlist): Boolean {
         feedbackManager.showLoading("Downloading...", "M3U Playlist")
         try {
-            val request = Request.Builder().url(playlist.url).build()
+            val request = okhttp3.Request.Builder().url(playlist.url).build()
             val response = okHttpClient.newCall(request).execute()
             val inputStream = response.body?.byteStream() ?: return false
 
@@ -248,7 +242,6 @@ class PrimeFlixRepository @Inject constructor(
 
     // --- Accessors ---
     fun getChannels(playlistUrl: String) = channelDao.getChannelsByPlaylist(playlistUrl)
-    fun getChannelsWithEpg(playlistUrl: String) = channelDao.getChannelsWithEpg(playlistUrl, System.currentTimeMillis())
     fun searchChannels(query: String) = channelDao.searchChannels(query)
     val favorites = channelDao.getFavorites()
 
@@ -260,7 +253,15 @@ class PrimeFlixRepository @Inject constructor(
 
     suspend fun saveProgress(url: String, pos: Long, dur: Long) {
         if (pos < 5000) return
-        watchProgressDao.saveProgress(WatchProgress(url, pos, dur, System.currentTimeMillis()))
+        // FIX: Use named arguments to map (String, Long, Long) to the Entity correctly
+        watchProgressDao.saveProgress(
+            WatchProgress(
+                channelUrl = url,
+                position = pos,
+                duration = dur,
+                lastPlayed = System.currentTimeMillis()
+            )
+        )
     }
 
     suspend fun getCurrentProgram(id: String) = programmeDao.getCurrentProgram(id, System.currentTimeMillis())
@@ -269,5 +270,6 @@ class PrimeFlixRepository @Inject constructor(
 
     fun getGroups(url: String, type: String) = channelDao.getGroups(url, type)
     fun getLiveChannels(url: String, group: String) = channelDao.getLiveChannels(url, group, System.currentTimeMillis())
-    fun getVodChannels(url: String, type: String, group: String) = channelDao.getVodChannels(url, type, group)
+    // FIX: Renamed parameter to 'playlistUrl' to match PlayerViewModel call
+    fun getVodChannels(playlistUrl: String, type: String, group: String) = channelDao.getVodChannels(playlistUrl, type, group)
 }
