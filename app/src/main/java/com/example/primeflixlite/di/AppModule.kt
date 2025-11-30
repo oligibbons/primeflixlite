@@ -22,6 +22,9 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
@@ -29,6 +32,13 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
+
+    @Provides
+    @Singleton
+    fun provideApplicationScope(): CoroutineScope {
+        // SupervisorJob ensures one failure doesn't cancel the whole scope
+        return CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    }
 
     @Provides
     @Singleton
@@ -89,7 +99,7 @@ object AppModule {
     @Provides
     @Singleton
     fun provideRepository(
-        database: PrimeFlixDatabase, // INJECTED for Transactions
+        database: PrimeFlixDatabase,
         playlistDao: PlaylistDao,
         channelDao: ChannelDao,
         programmeDao: ProgrammeDao,
@@ -98,7 +108,8 @@ object AppModule {
         m3uParser: M3UParser,
         xmltvParser: XmltvParser,
         okHttpClient: OkHttpClient,
-        feedbackManager: FeedbackManager
+        feedbackManager: FeedbackManager,
+        externalScope: CoroutineScope // Injected here
     ): PrimeFlixRepository {
         return PrimeFlixRepository(
             database,
@@ -110,7 +121,8 @@ object AppModule {
             m3uParser,
             xmltvParser,
             okHttpClient,
-            feedbackManager
+            feedbackManager,
+            externalScope
         )
     }
 
@@ -121,7 +133,7 @@ object AppModule {
             .okHttpClient(client)
             .memoryCache {
                 MemoryCache.Builder(context)
-                    .maxSizePercent(0.12) // Low RAM Optim
+                    .maxSizePercent(0.12)
                     .build()
             }
             .diskCache {

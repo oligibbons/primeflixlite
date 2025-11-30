@@ -39,15 +39,20 @@ import com.example.primeflixlite.ui.theme.White
 
 @Composable
 fun DetailsScreen(
-    channel: Channel,
+    channel: Channel, // Placeholder passed from Nav
     viewModel: DetailsViewModel,
     imageLoader: coil.ImageLoader,
     onPlayClick: (String) -> Unit,
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val context = LocalContext.current
+    // FIX: Observe the LIVE data from ViewModel
+    val liveChannel by viewModel.currentChannel.collectAsState()
 
+    // Use live data if available, otherwise fallback to placeholder
+    val displayChannel = liveChannel ?: channel
+
+    // Trigger load if we only have the placeholder
     LaunchedEffect(channel) {
         viewModel.loadContent(channel)
     }
@@ -59,30 +64,29 @@ fun DetailsScreen(
         Brush.verticalGradient(
             colors = listOf(Color.Transparent, VoidBlack),
             startY = 0f,
-            endY = Float.POSITIVE_INFINITY // Will be adjusted in drawWithContent if needed, but simple linear is usually fine
+            endY = Float.POSITIVE_INFINITY
         )
     }
 
     // PERFORMANCE: Resize backdrop
-    val backdropRequest = remember(channel.cover) {
-        ImageRequest.Builder(context)
-            .data(channel.cover)
-            .size(1280, 720) // Critical for 1GB RAM
-            .crossfade(false)
+    val backdropRequest = remember(displayChannel.cover) {
+        ImageRequest.Builder(LocalContext.current)
+            .data(displayChannel.cover)
+            .size(1280, 720)
+            .crossfade(true)
             .build()
     }
 
-    // PERFORMANCE: Resize poster
-    val posterRequest = remember(channel.cover) {
-        ImageRequest.Builder(context)
-            .data(channel.cover)
+    val posterRequest = remember(displayChannel.cover) {
+        ImageRequest.Builder(LocalContext.current)
+            .data(displayChannel.cover)
             .size(400, 600)
             .build()
     }
 
     Box(modifier = Modifier.fillMaxSize().background(VoidBlack)) {
         // --- BACKDROP ---
-        if (!channel.cover.isNullOrEmpty()) {
+        if (!displayChannel.cover.isNullOrEmpty()) {
             AsyncImage(
                 model = backdropRequest,
                 imageLoader = imageLoader,
@@ -93,13 +97,7 @@ fun DetailsScreen(
                     .height(400.dp)
                     .drawWithContent {
                         drawContent()
-                        drawRect(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, VoidBlack),
-                                startY = 0f,
-                                endY = size.height
-                            )
-                        )
+                        drawRect(brush = backdropGradient)
                     }
             )
         }
@@ -113,7 +111,7 @@ fun DetailsScreen(
                     elevation = CardDefaults.cardElevation(8.dp),
                     modifier = Modifier.aspectRatio(2f/3f)
                 ) {
-                    if (!channel.cover.isNullOrEmpty()) {
+                    if (!displayChannel.cover.isNullOrEmpty()) {
                         AsyncImage(
                             model = posterRequest,
                             imageLoader = imageLoader,
@@ -122,7 +120,14 @@ fun DetailsScreen(
                             contentScale = ContentScale.Crop
                         )
                     } else {
-                        Box(Modifier.fillMaxSize().background(Color.DarkGray))
+                        Box(Modifier.fillMaxSize().background(Color.DarkGray), contentAlignment = Alignment.Center) {
+                            // Show loading text only if truly loading
+                            if (displayChannel.title == "Loading...") {
+                                CircularProgressIndicator(color = NeonBlue)
+                            } else {
+                                Text(displayChannel.title.take(1), style = MaterialTheme.typography.displayMedium)
+                            }
+                        }
                     }
                 }
             }
@@ -132,7 +137,7 @@ fun DetailsScreen(
             // RIGHT: Metadata & Episodes
             Column(modifier = Modifier.fillMaxSize()) {
                 Text(
-                    text = channel.title,
+                    text = displayChannel.title,
                     style = MaterialTheme.typography.displaySmall,
                     color = White,
                     fontWeight = FontWeight.Bold
@@ -140,15 +145,15 @@ fun DetailsScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                if (channel.type == StreamType.MOVIE.name) {
+                if (displayChannel.type == StreamType.MOVIE.name) {
                     PlayButton(
-                        onClick = { onPlayClick(channel.url) },
+                        onClick = { onPlayClick(displayChannel.url) },
                         label = "PLAY MOVIE"
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(text = "Group: ${channel.group}", color = Color.Gray)
+                    Text(text = "Group: ${displayChannel.group}", color = Color.Gray)
                 }
-                else if (channel.type == StreamType.SERIES.name) {
+                else if (displayChannel.type == StreamType.SERIES.name) {
                     if (uiState.isLoading) {
                         CircularProgressIndicator(color = NeonBlue)
                     } else if (uiState.episodes.isNotEmpty()) {
@@ -175,7 +180,6 @@ fun DetailsScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             contentPadding = PaddingValues(bottom = 32.dp)
                         ) {
-                            // OPTIMIZATION: Use key for efficient recomposition
                             items(
                                 items = viewModel.getEpisodesForSeason(viewModel.selectedSeason),
                                 key = { it.id ?: it.hashCode() }
@@ -184,7 +188,7 @@ fun DetailsScreen(
                                     episode = episode,
                                     onClick = {
                                         val ext = episode.containerExtension ?: "mkv"
-                                        val url = "${channel.url.substringBefore("/series/")}/series/${channel.url.split("/")[4]}/${channel.url.split("/")[5]}/${episode.id}.$ext"
+                                        val url = "${displayChannel.url.substringBefore("/series/")}/series/${displayChannel.url.split("/")[4]}/${displayChannel.url.split("/")[5]}/${episode.id}.$ext"
                                         onPlayClick(url)
                                     }
                                 )

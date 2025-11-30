@@ -6,21 +6,19 @@ import com.example.primeflixlite.data.local.entity.StreamType
 import com.example.primeflixlite.data.local.model.ChannelWithProgram
 
 data class HomeUiState(
-    // Global Data
+    // Playlist Selection
     val playlists: List<Playlist> = emptyList(),
     val selectedPlaylist: Playlist? = null,
 
-    // Dashboard Data
+    // Navigation / Filtering
     val selectedTab: StreamType = StreamType.LIVE,
-    val categories: List<String> = emptyList(),
+    val categories: List<String> = emptyList(), // ["All", "Sports", "News"...]
     val selectedCategory: String = "All",
 
-    // Content Lists
-    val displayedChannels: List<ChannelWithProgram> = emptyList(),
-    val continueWatching: List<Channel> = emptyList(),
-
-    // NEW: "My List" Row Data
-    val favorites: List<Channel> = emptyList(),
+    // Content
+    val displayedChannels: List<ChannelWithProgram> = emptyList(), // Main Grid
+    val continueWatching: List<Channel> = emptyList(),             // Top Row
+    val favorites: List<Channel> = emptyList(),                    // Favorites Row
 
     // Status
     val isLoading: Boolean = false,

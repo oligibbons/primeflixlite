@@ -25,30 +25,25 @@ class PlayerViewModel @Inject constructor(
     private val repository: PrimeFlixRepository
 ) : ViewModel() {
 
-    // --- State ---
     private val _currentChannel = MutableStateFlow<Channel?>(null)
     val currentChannel = _currentChannel.asStateFlow()
 
     private val _currentProgram = MutableStateFlow<Programme?>(null)
     val currentProgram = _currentProgram.asStateFlow()
 
-    private val _resizeMode = MutableStateFlow(0) // 0: Fit, 1: Fill, 2: Zoom
+    private val _resizeMode = MutableStateFlow(0)
     val resizeMode = _resizeMode.asStateFlow()
 
     private val _isPlaying = MutableStateFlow(true)
     val isPlaying = _isPlaying.asStateFlow()
 
-    // Player Instance (Managed here to prevent crashes)
     var player: ExoPlayer? = null
         private set
 
-    // Internal State
     private var playlistChannels: List<Channel> = emptyList()
     private var progressJob: Job? = null
 
-    // --- Initialization ---
     fun initialize(context: Context, channel: Channel) {
-        // Prevent re-initialization if already playing the same channel
         if (player != null && _currentChannel.value?.url == channel.url) return
 
         _currentChannel.value = channel
@@ -58,6 +53,7 @@ class PlayerViewModel @Inject constructor(
         initializePlayerSafely(context, channel)
     }
 
+    // CRITICAL FIX: Allows correct loading from Deep Links or Navigation
     fun loadChannelById(id: Long) {
         viewModelScope.launch {
             val channel = repository.getChannelById(id)
@@ -65,14 +61,12 @@ class PlayerViewModel @Inject constructor(
                 _currentChannel.value = channel
                 loadEpgForChannel(channel)
                 loadPlaylistContext(channel)
-                // Note: Actual ExoPlayer initialization still happens in the Composable's DisposableEffect
-                // using the passed context, but this ensures we have the full data object.
             }
         }
     }
 
     private fun initializePlayerSafely(context: Context, channel: Channel) {
-        releasePlayer() // Cleanup any old instance
+        releasePlayer()
 
         try {
             player = ExoPlayer.Builder(context)
@@ -90,7 +84,6 @@ class PlayerViewModel @Inject constructor(
 
                         override fun onPlayerError(error: PlaybackException) {
                             Log.e("PlayerViewModel", "ExoPlayer Critical Error", error)
-                            // Crash Prevention: Don't let the app die, just stop playback
                             stop()
                         }
                     })
@@ -100,15 +93,9 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    // --- Zapping Logic (OPTIMIZED) ---
     private fun loadPlaylistContext(channel: Channel) {
         viewModelScope.launch {
             try {
-                // MEMORY OPTIMIZATION:
-                // Instead of loading ALL channels (which can be 20k+),
-                // we only load channels in the CURRENT GROUP and TYPE.
-                // This reduces the list size to usually < 200 items, safe for 1GB RAM.
-                // We reuse 'getVodChannels' because it returns a clean List<Channel> without EPG joins.
                 repository.getVodChannels(
                     playlistUrl = channel.playlistUrl,
                     type = channel.type,
@@ -148,7 +135,6 @@ class PlayerViewModel @Inject constructor(
         _currentChannel.value = channel
         loadEpgForChannel(channel)
 
-        // Fast switch without recreating the whole player
         player?.apply {
             setMediaItem(MediaItem.fromUri(channel.url))
             prepare()
@@ -156,7 +142,6 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    // --- Favorites Logic ---
     fun toggleFavorite() {
         val current = _currentChannel.value ?: return
         viewModelScope.launch {
@@ -165,7 +150,6 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    // --- EPG Logic ---
     private fun loadEpgForChannel(channel: Channel) {
         viewModelScope.launch {
             val epgId = channel.relationId ?: channel.title
@@ -174,7 +158,6 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    // --- Player Controls ---
     fun playPause() {
         player?.let {
             if (it.isPlaying) it.pause() else it.play()

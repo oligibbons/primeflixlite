@@ -34,12 +34,12 @@ class DetailsViewModel @Inject constructor(
     fun loadContent(channel: Channel) {
         _currentChannel.value = channel
 
-        // FIX: Compare String vs String (using .name)
         if (channel.type == StreamType.SERIES.name) {
             loadEpisodes(channel)
         }
     }
 
+    // CRITICAL FIX: This allows MainActivity to fetch the REAL data using the ID
     fun loadChannelById(id: Long) {
         viewModelScope.launch {
             val channel = repository.getChannelById(id)
@@ -85,7 +85,6 @@ class DetailsViewModel @Inject constructor(
     fun getEpisodesForSeason(season: Int): List<XtreamChannelInfo.Episode> {
         return uiState.value.episodes
             .filter { it.season == season }
-            // FIX: Use camelCase episodeNum
             .sortedBy { it.episodeNum }
     }
 

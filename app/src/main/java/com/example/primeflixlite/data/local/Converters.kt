@@ -1,53 +1,44 @@
 package com.example.primeflixlite.data.local
 
 import androidx.room.TypeConverter
-import com.example.primeflixlite.data.local.entity.DataSource
 import com.example.primeflixlite.data.local.entity.StreamType
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import java.util.Date
 
 class Converters {
-    private val json = Json { ignoreUnknownKeys = true }
+
+    // --- StreamType Enum ---
+    @TypeConverter
+    fun fromStreamType(value: StreamType): String = value.name
 
     @TypeConverter
+    fun toStreamType(value: String): StreamType = try {
+        StreamType.valueOf(value)
+    } catch (e: Exception) {
+        StreamType.LIVE // Fallback
+    }
+
+    // --- Date/Long ---
+    @TypeConverter
+    fun fromTimestamp(value: Long?): Date? = value?.let { Date(it) }
+
+    @TypeConverter
+    fun dateToTimestamp(date: Date?): Long? = date?.time
+
+    // --- List<String> (for generic lists) ---
+    @TypeConverter
     fun fromStringList(value: List<String>?): String {
-        return json.encodeToString(value ?: emptyList())
+        return Gson().toJson(value)
     }
 
     @TypeConverter
     fun toStringList(value: String?): List<String> {
-        return if (value.isNullOrEmpty()) {
-            emptyList()
-        } else {
-            try {
-                json.decodeFromString(value)
-            } catch (e: Exception) {
-                emptyList()
-            }
-        }
-    }
-
-    @TypeConverter
-    fun fromDataSource(source: DataSource): String {
-        return source.value
-    }
-
-    @TypeConverter
-    fun toDataSource(value: String): DataSource {
-        return DataSource.of(value)
-    }
-
-    @TypeConverter
-    fun fromStreamType(type: StreamType): String {
-        return type.name
-    }
-
-    @TypeConverter
-    fun toStreamType(value: String): StreamType {
+        val listType = object : TypeToken<List<String>>() {}.type
         return try {
-            StreamType.valueOf(value)
+            Gson().fromJson(value, listType) ?: emptyList()
         } catch (e: Exception) {
-            StreamType.LIVE
+            emptyList()
         }
     }
 }

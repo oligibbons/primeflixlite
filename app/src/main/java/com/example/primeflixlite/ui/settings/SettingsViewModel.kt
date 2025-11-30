@@ -37,22 +37,20 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun syncPlaylist(playlist: Playlist) {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, message = "Syncing ${playlist.title}...")
-            try {
-                repository.syncPlaylist(playlist)
-                _uiState.value = _uiState.value.copy(isLoading = false, message = "Sync Complete!")
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(isLoading = false, message = "Sync Failed: ${e.message}")
-            }
-        }
+        // Updated for Background Sync:
+        // We trigger the sync via repository (which now uses Application Scope).
+        // We do NOT wait for it to finish here.
+        // We just show a quick toast saying "Sync Started".
+
+        repository.syncPlaylist(playlist)
+
+        _uiState.value = _uiState.value.copy(message = "Background Sync Started...")
     }
 
     fun deletePlaylist(playlist: Playlist) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
             try {
-                // This call triggers the repository to delete from PlaylistDao, ChannelDao, and ProgrammeDao
                 repository.deletePlaylist(playlist)
                 _uiState.value = _uiState.value.copy(isLoading = false, message = "Playlist Removed")
             } catch (e: Exception) {
