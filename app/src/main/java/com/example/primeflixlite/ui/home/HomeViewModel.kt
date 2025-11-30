@@ -2,7 +2,6 @@ package com.example.primeflixlite.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.primeflixlite.data.local.entity.Channel
 import com.example.primeflixlite.data.local.entity.Playlist
 import com.example.primeflixlite.data.local.entity.StreamType
 import com.example.primeflixlite.data.local.model.ChannelWithProgram
@@ -11,7 +10,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -30,6 +28,9 @@ class HomeViewModel @Inject constructor(
     private var groupsJob: Job? = null
 
     init {
+        // [Requirement] Default tab is SERIES
+        _uiState.value = _uiState.value.copy(selectedTab = StreamType.SERIES)
+
         loadPlaylists()
         observeFavorites()
     }
@@ -47,6 +48,7 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun observeFavorites() {
+        // Keep favorites sync'd in background for the "Favorites" smart category
         viewModelScope.launch {
             repository.favorites.collect { favs ->
                 _uiState.value = _uiState.value.copy(favorites = favs)
@@ -63,13 +65,16 @@ class HomeViewModel @Inject constructor(
     }
 
     fun selectTab(tab: StreamType) {
-        _uiState.value = _uiState.value.copy(selectedTab = tab, selectedCategory = "All")
+        _uiState.value = _uiState.value.copy(
+            selectedTab = tab,
+            selectedCategory = "All" // Reset to "All" when switching tabs
+        )
         refreshContent()
     }
 
     fun selectCategory(category: String) {
         _uiState.value = _uiState.value.copy(selectedCategory = category)
-        loadChannels() // Reload channels filter, no need to reload groups
+        loadChannels() // Reload content based on the new category
     }
 
     private fun refreshContent() {
@@ -85,8 +90,23 @@ class HomeViewModel @Inject constructor(
         groupsJob?.cancel()
         groupsJob = repository.getGroups(playlist.url, type)
             .onEach { groups ->
-                val allGroups = listOf("All") + groups
-                _uiState.value = _uiState.value.copy(categories = allGroups)
+                // [Smart Categories] Inject Dynamic Collections
+                val smartCategories = mutableListOf("All")
+
+                // 1. Favorites (Always useful)
+                smartCategories.add("Favorites")
+
+                // 2. Recently Added & Continue Watching (Mostly for VOD)
+                if (_uiState.value.selectedTab != StreamType.LIVE) {
+                    smartCategories.add("Recently Added")
+                    smartCategories.add("Continue Watching")
+                }
+
+                // 3. Add the standard "Genre" groups from the Provider
+                // (e.g., "Action", "Comedy", "Documentary")
+                smartCategories.addAll(groups)
+
+                _uiState.value = _uiState.value.copy(categories = smartCategories)
             }
             .launchIn(viewModelScope)
     }
@@ -99,25 +119,41 @@ class HomeViewModel @Inject constructor(
         contentJob?.cancel()
         _uiState.value = _uiState.value.copy(isLoading = true)
 
-        if (type == StreamType.LIVE) {
-            // Live Channels have EPG Join
-            contentJob = repository.getLiveChannels(playlist.url, category)
-                .onEach { items ->
-                    _uiState.value = _uiState.value.copy(displayedChannels = items, isLoading = false)
+        // [Dynamic Content Switching]
+        // Based on the category name, we decide which Data Source to pull from.
+        val flow = when (category) {
+            "All" -> {
+                repository.getBrowsingContent(playlist.url, type, "All")
+            }
+            "Favorites" -> {
+                // Filter the global favorites list by the current Tab Type (Movie/Series/Live)
+                repository.favorites.map { allFavs ->
+                    allFavs.filter { it.type == type.name }
+                        .map { ChannelWithProgram(it, null) }
                 }
-                .launchIn(viewModelScope)
-        } else {
-            // VOD (Movies/Series) - Simple Fetch, no EPG
-            contentJob = repository.getVodChannels(playlist.url, type.name, category)
-                .map { channels ->
-                    // Map simple Channel to ChannelWithProgram (program = null)
-                    channels.map { ChannelWithProgram(it, null) }
-                }
-                .onEach { items ->
-                    _uiState.value = _uiState.value.copy(displayedChannels = items, isLoading = false)
-                }
-                .launchIn(viewModelScope)
+            }
+            "Recently Added" -> {
+                repository.getRecentAdded(playlist.url, type)
+                    .map { channels -> channels.map { ChannelWithProgram(it, null) } }
+            }
+            "Continue Watching" -> {
+                repository.getContinueWatching(type)
+                    .map { progressItems ->
+                        progressItems.map { ChannelWithProgram(it.channel, null) }
+                    }
+            }
+            else -> {
+                // It's a specific XTream Group (Genre)
+                repository.getBrowsingContent(playlist.url, type, category)
+            }
         }
+
+        contentJob = flow.onEach { items ->
+            _uiState.value = _uiState.value.copy(
+                displayedChannels = items,
+                isLoading = false
+            )
+        }.launchIn(viewModelScope)
     }
 
     fun refreshContinueWatching() {
@@ -125,12 +161,11 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 repository.getContinueWatching(tab).collect { progressList ->
-                    // Extract channel objects from the Join
                     val channels = progressList.map { it.channel }
                     _uiState.value = _uiState.value.copy(continueWatching = channels)
                 }
             } catch (e: Exception) {
-                // Log or handle error
+                // Log error safely
             }
         }
     }

@@ -1,3 +1,4 @@
+// file: app/src/main/java/com/example/primeflixlite/data/local/dao/ChannelDao.kt
 package com.example.primeflixlite.data.local.dao
 
 import androidx.room.Dao
@@ -11,6 +12,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ChannelDao {
+
     // --- LEGACY / UTILS ---
     @Query("SELECT * FROM streams WHERE playlist_url = :playlistUrl ORDER BY `group`, title")
     fun getChannelsByPlaylist(playlistUrl: String): Flow<List<Channel>>
@@ -34,12 +36,11 @@ interface ChannelDao {
 
     // --- OPTIMIZED QUERIES FOR HOME SCREEN ---
 
-    // 1. Get Categories (Groups) dynamically based on selected Tab (Type)
+    // 1. Get Categories (Groups) dynamically
     @Query("SELECT DISTINCT `group` FROM streams WHERE playlist_url = :url AND type = :type ORDER BY `group` ASC")
     fun getGroups(url: String, type: String): Flow<List<String>>
 
-    // 2. LIVE TV: Fetches Channels + EPG (Joined)
-    // Filters by Group at SQL level to avoid memory overhead
+    // 2. LIVE TV: Fetches Channels + EPG (Joined) - YOUR OPTIMIZED QUERY
     @Transaction
     @Query("""
         SELECT c.*, 
@@ -61,8 +62,7 @@ interface ChannelDao {
     """)
     fun getLiveChannels(url: String, group: String, nowMillis: Long): Flow<List<ChannelWithProgram>>
 
-    // 3. VOD (Movies/Series): Fetches Channels ONLY (No EPG Join needed)
-    // Much lighter query for large VOD libraries
+    // 3. VOD (Standard): Simple Fetch
     @Query("""
         SELECT * FROM streams 
         WHERE playlist_url = :url 
@@ -71,6 +71,34 @@ interface ChannelDao {
         ORDER BY title ASC
     """)
     fun getVodChannels(url: String, type: String, group: String): Flow<List<Channel>>
+
+    // --- NEW: SMART DEDUPLICATION & METADATA ---
+
+    // 4. Smart VOD: Returns UNIQUE movies (grouped by canonical_title)
+    // Used for the main browsing list to hide duplicates
+    @Query("""
+        SELECT * FROM streams 
+        WHERE playlist_url = :url 
+        AND type = :type 
+        AND (:group = 'All' OR `group` = :group)
+        GROUP BY canonical_title 
+        ORDER BY title ASC
+    """)
+    fun getDistinctCanonicalMovies(url: String, type: String, group: String): Flow<List<Channel>>
+
+    // 5. Versions: Get all qualities (4K, 1080p) for a specific Movie
+    @Query("""
+        SELECT * FROM streams 
+        WHERE playlist_url = :url 
+        AND type = :type 
+        AND canonical_title = :canonicalTitle
+        ORDER BY quality DESC
+    """)
+    suspend fun getVersions(url: String, type: String, canonicalTitle: String): List<Channel>
+
+    // 6. Recently Added: Global list sorted by ID (assuming newer ID = newer import)
+    @Query("SELECT * FROM streams WHERE playlist_url = :url AND type = :type ORDER BY id DESC LIMIT 20")
+    fun getRecentlyAdded(url: String, type: String): Flow<List<Channel>>
 
     // --- WRITE OPERATIONS ---
 

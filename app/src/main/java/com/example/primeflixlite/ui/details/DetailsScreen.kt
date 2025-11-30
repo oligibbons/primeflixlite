@@ -16,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
@@ -26,7 +27,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.primeflixlite.data.local.entity.Channel
@@ -49,6 +52,7 @@ fun DetailsScreen(
     val liveChannel by viewModel.currentChannel.collectAsState()
     val displayChannel = liveChannel ?: channel
     val context = LocalContext.current
+    val meta = uiState.metadata
 
     LaunchedEffect(channel) {
         viewModel.loadContent(channel)
@@ -64,24 +68,32 @@ fun DetailsScreen(
         )
     }
 
-    // FIX: Using 'context' variable instead of calling LocalContext.current inside remember
-    val backdropRequest = remember(displayChannel.cover) {
+    // Prefer TMDB Backdrop, fallback to IPTV cover
+    val backdropUrl = meta?.backdropPath?.let { "https://image.tmdb.org/t/p/w1280$it" }
+        ?: displayChannel.cover
+
+    val backdropRequest = remember(backdropUrl) {
         ImageRequest.Builder(context)
-            .data(displayChannel.cover)
+            .data(backdropUrl)
             .size(1280, 720)
-            .crossfade(false)
+            .crossfade(true)
             .build()
     }
 
-    val posterRequest = remember(displayChannel.cover) {
+    // Prefer TMDB Poster, fallback to IPTV cover
+    val posterUrl = meta?.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" }
+        ?: displayChannel.cover
+
+    val posterRequest = remember(posterUrl) {
         ImageRequest.Builder(context)
-            .data(displayChannel.cover)
+            .data(posterUrl)
             .size(400, 600)
             .build()
     }
 
     Box(modifier = Modifier.fillMaxSize().background(VoidBlack)) {
-        if (!displayChannel.cover.isNullOrEmpty()) {
+        // --- BACKGROUND ---
+        if (!backdropUrl.isNullOrEmpty()) {
             AsyncImage(
                 model = backdropRequest,
                 imageLoader = imageLoader,
@@ -89,7 +101,8 @@ fun DetailsScreen(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(400.dp)
+                    .height(500.dp) // Taller backdrop
+                    .alpha(0.5f)    // Dimmed
                     .drawWithContent {
                         drawContent()
                         drawRect(brush = backdropGradient)
@@ -97,14 +110,17 @@ fun DetailsScreen(
             )
         }
 
+        // --- CONTENT ---
         Row(modifier = Modifier.fillMaxSize().padding(40.dp)) {
-            Column(modifier = Modifier.width(300.dp)) {
+
+            // LEFT COLUMN: POSTER
+            Column(modifier = Modifier.width(280.dp)) {
                 Card(
                     shape = RoundedCornerShape(12.dp),
                     elevation = CardDefaults.cardElevation(8.dp),
                     modifier = Modifier.aspectRatio(2f/3f)
                 ) {
-                    if (!displayChannel.cover.isNullOrEmpty()) {
+                    if (!posterUrl.isNullOrEmpty()) {
                         AsyncImage(
                             model = posterRequest,
                             imageLoader = imageLoader,
@@ -120,25 +136,64 @@ fun DetailsScreen(
 
             Spacer(modifier = Modifier.width(32.dp))
 
+            // RIGHT COLUMN: INFO & ACTIONS
             Column(modifier = Modifier.fillMaxSize()) {
+
+                // 1. TITLE
                 Text(
-                    text = displayChannel.title,
+                    text = meta?.title ?: displayChannel.canonicalTitle ?: displayChannel.title,
                     style = MaterialTheme.typography.displaySmall,
                     color = White,
                     fontWeight = FontWeight.Bold
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                if (displayChannel.type == StreamType.MOVIE.name) {
-                    PlayButton(
-                        onClick = { onPlayClick(displayChannel.url) },
-                        label = "PLAY MOVIE"
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(text = "Group: ${displayChannel.group}", color = Color.Gray)
+                // 2. BADGES (Rating, Genres, Year)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (meta?.voteAverage != null && meta.voteAverage > 0.0) {
+                        Badge(text = "★ ${String.format("%.1f", meta.voteAverage)}", color = BurntYellow)
+                    }
+                    meta?.genres?.let {
+                        if (it.isNotEmpty()) Text(text = it, color = Color.LightGray, fontSize = 14.sp)
+                    }
                 }
-                else if (displayChannel.type == StreamType.SERIES.name) {
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // 3. ACTIONS (Versions or Series Logic)
+                if (displayChannel.type == StreamType.MOVIE.name) {
+
+                    // MOVIE: Show Versions (4K, 1080p)
+                    Text("Select Version:", color = Color.Gray, fontSize = 12.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (uiState.versions.isNotEmpty()) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            items(uiState.versions) { version ->
+                                PlayButton(
+                                    onClick = { onPlayClick(version.url) },
+                                    label = if (version.quality.isNotEmpty()) version.quality else "PLAY",
+                                    isHighlight = version.quality.contains("4K", true)
+                                )
+                            }
+                        }
+                    } else {
+                        // Fallback if versions list empty (rare)
+                        PlayButton(
+                            onClick = { onPlayClick(displayChannel.url) },
+                            label = "PLAY MOVIE"
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                } else if (displayChannel.type == StreamType.SERIES.name) {
+
+                    // SERIES: Episodes Logic
                     if (uiState.isLoading) {
                         CircularProgressIndicator(color = NeonBlue)
                     } else if (uiState.episodes.isNotEmpty()) {
@@ -157,8 +212,36 @@ fun DetailsScreen(
                             }
                         }
 
+                        // We put the episode list in a Box with weight so it scrolls properly
+                        // inside this Column, separate from the Plot/Cast below
                         Spacer(modifier = Modifier.height(16.dp))
+                    }
+                }
 
+                // 4. PLOT & CAST (Scrollable container for text)
+                Column(modifier = Modifier.weight(1f).focusable(false)) {
+                    if (meta?.overview != null) {
+                        Text(
+                            text = meta.overview,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFFDDDDDD),
+                            maxLines = 6,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
+                    if (meta?.castPreview != null) {
+                        Text(
+                            text = "Cast: ${meta.castPreview}",
+                            color = Color.Gray,
+                            fontSize = 14.sp
+                        )
+                    }
+
+                    // If Series, list episodes here (taking remaining space)
+                    if (displayChannel.type == StreamType.SERIES.name && uiState.episodes.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(24.dp))
                         LazyColumn(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             contentPadding = PaddingValues(bottom = 32.dp)
@@ -185,18 +268,19 @@ fun DetailsScreen(
 }
 
 @Composable
-fun PlayButton(onClick: () -> Unit, label: String) {
+fun PlayButton(onClick: () -> Unit, label: String, isHighlight: Boolean = false) {
     var isFocused by remember { mutableStateOf(false) }
-    val focusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    // Only request focus initially if it's the first button (simplification)
+    // In a real grid, you'd manage focusRequester refs more carefully.
 
     Button(
         onClick = onClick,
-        colors = ButtonDefaults.buttonColors(containerColor = BurntYellow),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (isHighlight) NeonBlue else BurntYellow
+        ),
         modifier = Modifier
             .height(50.dp)
-            .focusRequester(focusRequester)
             .onFocusChanged { isFocused = it.isFocused }
             .border(
                 if(isFocused) 3.dp else 0.dp,
@@ -235,5 +319,22 @@ fun EpisodeRow(episode: XtreamChannelInfo.Episode, onClick: () -> Unit) {
             modifier = Modifier.width(40.dp)
         )
         Text(text = episode.title ?: "Episode ${episode.episodeNum}", color = White)
+    }
+}
+
+@Composable
+fun Badge(text: String, color: Color) {
+    Surface(
+        color = color.copy(alpha = 0.2f),
+        shape = RoundedCornerShape(4.dp),
+        modifier = Modifier.padding(end = 8.dp)
+    ) {
+        Text(
+            text = text,
+            color = color,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold
+        )
     }
 }

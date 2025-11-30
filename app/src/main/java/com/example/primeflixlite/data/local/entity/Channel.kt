@@ -1,3 +1,4 @@
+// file: app/src/main/java/com/example/primeflixlite/data/local/entity/Channel.kt
 package com.example.primeflixlite.data.local.entity
 
 import androidx.room.ColumnInfo
@@ -6,41 +7,51 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(
-    tableName = "streams",
+    tableName = "channels",
     indices = [
-        Index(value = ["playlist_url"]),
-        Index(value = ["type"]),
-        Index(value = ["is_favorite"])
+        Index(value = ["playlist_url", "group"]), // For category browsing
+        Index(value = ["canonical_title"]), // For grouping duplicates
+        Index(value = ["stream_id"])
     ]
 )
 data class Channel(
     @PrimaryKey(autoGenerate = true)
-    @ColumnInfo(name = "id")
     val id: Long = 0,
 
     @ColumnInfo(name = "playlist_url")
     val playlistUrl: String,
 
+    @ColumnInfo(name = "stream_id")
+    val streamId: String,
+
     @ColumnInfo(name = "title")
-    val title: String,
+    val title: String, // The raw original title
+
+    // --- NEW FIELDS FOR SMART GROUPING ---
+    @ColumnInfo(name = "canonical_title")
+    val canonicalTitle: String? = null, // "Avengers Endgame" (Normalized)
+
+    @ColumnInfo(name = "quality")
+    val quality: String = "SD", // "4K", "1080p", "SD"
+
+    @ColumnInfo(name = "tmdb_id")
+    val tmdbId: Int? = null, // Link to rich metadata
+    // -------------------------------------
 
     @ColumnInfo(name = "group")
-    val group: String = "Uncategorized",
+    val group: String,
 
     @ColumnInfo(name = "url")
     val url: String,
 
     @ColumnInfo(name = "cover")
-    val cover: String? = null,
+    val cover: String?,
 
     @ColumnInfo(name = "type")
-    val type: String = "LIVE",
+    val type: String, // StreamType.name (LIVE, MOVIE, SERIES)
 
     @ColumnInfo(name = "relation_id")
-    val relationId: String? = null,
-
-    @ColumnInfo(name = "stream_id")
-    val streamId: String? = null,
+    val relationId: String? = null, // EPG ID
 
     @ColumnInfo(name = "is_favorite")
     val isFavorite: Boolean = false

@@ -3,6 +3,7 @@ package com.example.primeflixlite.ui.details
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.primeflixlite.data.local.entity.Channel
+import com.example.primeflixlite.data.local.entity.MediaMetadata
 import com.example.primeflixlite.data.local.entity.StreamType
 import com.example.primeflixlite.data.parser.xtream.XtreamChannelInfo
 import com.example.primeflixlite.data.repository.PrimeFlixRepository
@@ -15,7 +16,10 @@ import javax.inject.Inject
 data class DetailsUiState(
     val isLoading: Boolean = false,
     val episodes: List<XtreamChannelInfo.Episode> = emptyList(),
-    val error: String? = null
+    val error: String? = null,
+    // [New] Metadata fields
+    val metadata: MediaMetadata? = null,
+    val versions: List<Channel> = emptyList() // For Movies: 4K, 1080p, etc.
 )
 
 @HiltViewModel
@@ -34,12 +38,17 @@ class DetailsViewModel @Inject constructor(
     fun loadContent(channel: Channel) {
         _currentChannel.value = channel
 
+        // [New] Fetch Rich Metadata (Async)
+        fetchMetadata(channel)
+
+        // Branch logic: Series vs Movie
         if (channel.type == StreamType.SERIES.name) {
             loadEpisodes(channel)
+        } else if (channel.type == StreamType.MOVIE.name) {
+            loadMovieVersions(channel)
         }
     }
 
-    // CRITICAL FIX: This allows MainActivity to fetch the REAL data using the ID
     fun loadChannelById(id: Long) {
         viewModelScope.launch {
             val channel = repository.getChannelById(id)
@@ -57,23 +66,64 @@ class DetailsViewModel @Inject constructor(
         }
     }
 
+    // --- METADATA LOGIC ---
+    private fun fetchMetadata(channel: Channel) {
+        viewModelScope.launch {
+            // Use canonical title if available (deduplicated), otherwise raw title
+            val queryTitle = channel.canonicalTitle ?: channel.title
+            val type = if (channel.type == StreamType.SERIES.name) "tv" else "movie"
+
+            val meta = repository.getMetadata(queryTitle, type)
+            _uiState.value = _uiState.value.copy(metadata = meta)
+        }
+    }
+
+    // --- MOVIE VERSION LOGIC ---
+    private fun loadMovieVersions(channel: Channel) {
+        viewModelScope.launch {
+            // If we have a canonical title, find all variants (4K, 1080p)
+            if (channel.canonicalTitle != null) {
+                val versions = repository.getVersions(
+                    channel.playlistUrl,
+                    StreamType.MOVIE,
+                    channel.canonicalTitle
+                )
+                // If versions found, update state. If not, fallback to current channel.
+                val finalVersions = if (versions.isNotEmpty()) versions else listOf(channel)
+                _uiState.value = _uiState.value.copy(versions = finalVersions)
+            } else {
+                _uiState.value = _uiState.value.copy(versions = listOf(channel))
+            }
+        }
+    }
+
+    // --- SERIES LOGIC ---
     private fun loadEpisodes(channel: Channel) {
         viewModelScope.launch {
-            _uiState.value = DetailsUiState(isLoading = true)
+            _uiState.value = _uiState.value.copy(isLoading = true)
             try {
-                val seriesId = channel.streamId?.toIntOrNull() ?: 0
+                val seriesId = channel.streamId.toIntOrNull() ?: 0
                 if (seriesId != 0) {
                     val episodes = repository.getSeriesEpisodes(channel.playlistUrl, seriesId)
-                    _uiState.value = DetailsUiState(episodes = episodes)
+                    _uiState.value = _uiState.value.copy(
+                        episodes = episodes,
+                        isLoading = false
+                    )
 
                     episodes.minByOrNull { it.season }?.let {
                         selectedSeason = it.season
                     }
                 } else {
-                    _uiState.value = DetailsUiState(error = "Invalid Series ID")
+                    _uiState.value = _uiState.value.copy(
+                        error = "Invalid Series ID",
+                        isLoading = false
+                    )
                 }
             } catch (e: Exception) {
-                _uiState.value = DetailsUiState(error = "Failed to load episodes: ${e.message}")
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to load episodes: ${e.message}",
+                    isLoading = false
+                )
             }
         }
     }
