@@ -3,7 +3,7 @@ package com.example.primeflixlite.ui.guide
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.primeflixlite.data.local.entity.Playlist
-import com.example.primeflixlite.data.local.model.ChannelWithProgram
+import com.example.primeflixlite.data.local.model.ChannelWithProgram // Ensure this is imported
 import com.example.primeflixlite.data.repository.PrimeFlixRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -32,7 +32,6 @@ class GuideViewModel @Inject constructor(
     private var clockJob: Job? = null
 
     init {
-        // Start a clock to refresh UI (progress bars) every minute
         startClock()
     }
 
@@ -41,8 +40,6 @@ class GuideViewModel @Inject constructor(
 
         contentJob?.cancel()
         contentJob = viewModelScope.launch {
-            // OPTIMIZATION: Use the SQL-level JOIN we added to ChannelDao.
-            // This is much faster than loading all channels and joining in Kotlin.
             repository.getLiveChannels(playlist.url, group)
                 .collect { items ->
                     _uiState.value = _uiState.value.copy(
@@ -56,10 +53,7 @@ class GuideViewModel @Inject constructor(
     private fun startClock() {
         clockJob = viewModelScope.launch {
             while (isActive) {
-                delay(60_000) // Update every minute
-                // Trigger a UI update by re-emitting state (if needed)
-                // In this simple architecture, Composable reads system time for progress,
-                // but re-emitting helps ensures sync.
+                delay(60_000)
                 val current = _uiState.value
                 _uiState.value = current.copy()
             }

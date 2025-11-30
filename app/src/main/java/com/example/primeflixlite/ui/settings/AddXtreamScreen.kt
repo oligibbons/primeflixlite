@@ -12,7 +12,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -33,7 +32,6 @@ fun AddXtreamScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // Handle success event
     LaunchedEffect(uiState.isSuccess) {
         if (uiState.isSuccess) {
             onPlaylistAdded()
@@ -45,7 +43,6 @@ fun AddXtreamScreen(
             .fillMaxSize()
             .background(VoidBlack)
     ) {
-        // Scrollable Content
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -55,7 +52,6 @@ fun AddXtreamScreen(
             verticalArrangement = Arrangement.Center
         ) {
 
-            // 1. LOGO (Prominent)
             Image(
                 painter = painterResource(id = R.drawable.logo_transparent),
                 contentDescription = "PrimeFlix+",
@@ -76,7 +72,6 @@ fun AddXtreamScreen(
 
             Spacer(modifier = Modifier.height(48.dp))
 
-            // 2. INPUT FORM (Constrained Width for TV)
             Column(
                 modifier = Modifier.width(400.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
@@ -105,15 +100,14 @@ fun AddXtreamScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // 3. ACTION BUTTON
                 NeonButton(
                     text = "CONNECT ACCOUNT",
                     icon = Icons.Default.AddLink,
                     isPrimary = true,
-                    onClick = { viewModel.addAccount() }
+                    // FIX: Changed from addAccount to validateAndSave
+                    onClick = { viewModel.validateAndSave() }
                 )
 
-                // Error Message
                 if (uiState.error != null) {
                     Text(
                         text = uiState.error!!,
@@ -125,7 +119,6 @@ fun AddXtreamScreen(
             }
         }
 
-        // 4. LOADING STATE
         if (uiState.isLoading) {
             LoadingOverlay(message = "Verifying Credentials...")
         }

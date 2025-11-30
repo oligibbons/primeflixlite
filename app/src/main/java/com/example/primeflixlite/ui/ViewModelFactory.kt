@@ -36,7 +36,6 @@ class ViewModelFactory(
             modelClass.isAssignableFrom(SettingsViewModel::class.java) -> {
                 SettingsViewModel(repository) as T
             }
-            // NEW: Guide
             modelClass.isAssignableFrom(GuideViewModel::class.java) -> {
                 GuideViewModel(repository) as T
             }

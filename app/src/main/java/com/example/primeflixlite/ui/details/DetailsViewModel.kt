@@ -1,10 +1,6 @@
 package com.example.primeflixlite.ui.details
 
-import android.app.Application
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.primeflixlite.data.local.entity.Channel
 import com.example.primeflixlite.data.local.entity.MediaMetadata
@@ -13,36 +9,41 @@ import com.example.primeflixlite.data.parser.xtream.XtreamChannelInfo
 import com.example.primeflixlite.data.repository.PrimeFlixRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class DetailsState(
-    val isLoading: Boolean = true,
+data class DetailsUiState(
+    val isLoading: Boolean = false,
+    val episodes: List<XtreamChannelInfo.Episode> = emptyList(),
+    val error: String? = null,
     val metadata: MediaMetadata? = null,
-    val versions: List<Channel> = emptyList(), // For Movies: 4K, 1080p, etc.
-    val episodes: List<XtreamChannelInfo.Episode> = emptyList() // For Series
+    val versions: List<Channel> = emptyList()
 )
 
 @HiltViewModel
 class DetailsViewModel @Inject constructor(
-    application: Application,
     private val repository: PrimeFlixRepository
-) : AndroidViewModel(application) {
+) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(DetailsState())
-    val uiState: StateFlow<DetailsState> = _uiState.asStateFlow()
+    private val _uiState = MutableStateFlow(DetailsUiState())
+    val uiState = _uiState.asStateFlow()
 
     private val _currentChannel = MutableStateFlow<Channel?>(null)
-    val currentChannel: StateFlow<Channel?> = _currentChannel.asStateFlow()
+    val currentChannel = _currentChannel.asStateFlow()
 
-    // UI State for Series selection
-    var selectedSeason by mutableStateOf(1)
+    var selectedSeason = 1
 
-    // Cached full list of episodes to avoid re-querying
-    private var allEpisodes: List<XtreamChannelInfo.Episode> = emptyList()
+    fun loadContent(channel: Channel) {
+        _currentChannel.value = channel
+        fetchMetadata(channel)
+
+        if (channel.type == StreamType.SERIES.name) {
+            loadEpisodes(channel)
+        } else if (channel.type == StreamType.MOVIE.name) {
+            loadMovieVersions(channel)
+        }
+    }
 
     fun loadChannelById(id: Long) {
         viewModelScope.launch {
@@ -53,64 +54,83 @@ class DetailsViewModel @Inject constructor(
         }
     }
 
-    fun loadContent(channel: Channel) {
-        _currentChannel.value = channel
-        _uiState.update { it.copy(isLoading = true) }
-
+    fun toggleFavorite() {
+        val current = _currentChannel.value ?: return
         viewModelScope.launch {
-            // 1. Fetch Metadata (TMDB)
-            // Use canonical title to get better matches (removes "4K", "HEVC" etc tags)
-            val meta = repository.getMetadata(
-                channel.canonicalTitle ?: channel.title,
-                channel.type
-            )
+            repository.toggleFavorite(current)
+            _currentChannel.value = current.copy(isFavorite = !current.isFavorite)
+        }
+    }
 
-            // 2. Fetch Content Specifics
-            var versions: List<Channel> = emptyList()
-            var episodes: List<XtreamChannelInfo.Episode> = emptyList()
+    private fun fetchMetadata(channel: Channel) {
+        viewModelScope.launch {
+            val queryTitle = channel.canonicalTitle ?: channel.title
+            val type = if (channel.type == StreamType.SERIES.name) "tv" else "movie"
+            val meta = repository.getMetadata(queryTitle, type)
+            _uiState.value = _uiState.value.copy(metadata = meta)
+        }
+    }
 
-            if (channel.type == StreamType.MOVIE.name) {
-                // Get other quality versions of this movie
-                versions = repository.getVersions(
+    private fun loadMovieVersions(channel: Channel) {
+        viewModelScope.launch {
+            if (channel.canonicalTitle != null) {
+                val versions = repository.getVersions(
                     channel.playlistUrl,
                     StreamType.MOVIE,
-                    channel.canonicalTitle ?: channel.title
+                    channel.canonicalTitle
                 )
-            } else if (channel.type == StreamType.SERIES.name) {
-                // Fetch episodes from Xtream API
-                // We use streamId as the series_id
-                channel.streamId?.toIntOrNull()?.let { seriesId ->
-                    episodes = repository.getSeriesEpisodes(channel.playlistUrl, seriesId)
-                }
-            }
-
-            allEpisodes = episodes
-
-            // Update State
-            _uiState.update {
-                it.copy(
-                    isLoading = false,
-                    metadata = meta,
-                    versions = versions,
-                    episodes = episodes
-                )
-            }
-
-            // Reset series selection if new content loaded
-            if (episodes.isNotEmpty()) {
-                val minSeason = episodes.minOfOrNull { ep -> ep.seasonNum } ?: 1
-                selectedSeason = minSeason
+                val finalVersions = if (versions.isNotEmpty()) versions else listOf(channel)
+                _uiState.value = _uiState.value.copy(versions = finalVersions)
+            } else {
+                _uiState.value = _uiState.value.copy(versions = listOf(channel))
             }
         }
     }
 
-    // --- Series Helpers ---
+    private fun loadEpisodes(channel: Channel) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true)
+            try {
+                val seriesId = channel.streamId.toIntOrNull() ?: 0
+                if (seriesId != 0) {
+                    val episodes = repository.getSeriesEpisodes(channel.playlistUrl, seriesId)
+                    _uiState.value = _uiState.value.copy(
+                        episodes = episodes,
+                        isLoading = false
+                    )
+
+                    // FIX: Use 'season' instead of 'seasonNum'
+                    episodes.minByOrNull { it.season }?.let {
+                        selectedSeason = it.season
+                    }
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        error = "Invalid Series ID",
+                        isLoading = false
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to load episodes: ${e.message}",
+                    isLoading = false
+                )
+            }
+        }
+    }
 
     fun getSeasons(): List<Int> {
-        return allEpisodes.map { it.seasonNum }.distinct().sorted()
+        // FIX: Use 'season'
+        return uiState.value.episodes.map { it.season }.distinct().sorted()
     }
 
     fun getEpisodesForSeason(season: Int): List<XtreamChannelInfo.Episode> {
-        return allEpisodes.filter { it.seasonNum == season }.sortedBy { it.episodeNum }
+        // FIX: Use 'season'
+        return uiState.value.episodes
+            .filter { it.season == season }
+            .sortedBy { it.episodeNum }
+    }
+
+    fun selectSeason(season: Int) {
+        selectedSeason = season
     }
 }

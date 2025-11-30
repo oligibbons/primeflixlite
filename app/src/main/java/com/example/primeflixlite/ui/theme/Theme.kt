@@ -15,6 +15,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+// FIX: Added Import
+import com.example.primeflixlite.ui.theme.BurntYellow
 
 // Force Dark Theme with our Neon Palette
 private val DarkColorScheme = darkColorScheme(
@@ -34,8 +36,6 @@ private val DarkColorScheme = darkColorScheme(
 @Composable
 fun PrimeFlixLiteTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    // We default to FALSE to enforce our Neon Brand logic
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
@@ -44,7 +44,6 @@ fun PrimeFlixLiteTheme(
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-        // Always force dark scheme for this TV app
         else -> DarkColorScheme
     }
 

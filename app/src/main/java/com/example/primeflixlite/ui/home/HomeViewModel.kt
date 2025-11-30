@@ -1,133 +1,167 @@
 package com.example.primeflixlite.ui.home
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.primeflixlite.data.local.entity.Channel
 import com.example.primeflixlite.data.local.entity.Playlist
 import com.example.primeflixlite.data.local.entity.StreamType
+import com.example.primeflixlite.data.local.model.ChannelWithProgram
 import com.example.primeflixlite.data.repository.PrimeFlixRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class HomeViewModel(
-    application: Application,
+@HiltViewModel
+class HomeViewModel @Inject constructor(
     private val repository: PrimeFlixRepository
-) : AndroidViewModel(application) {
+) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(HomeState())
-    val uiState: StateFlow<HomeState> = _uiState.asStateFlow()
+    private val _uiState = MutableStateFlow(HomeUiState())
+    val uiState = _uiState.asStateFlow()
 
-    private var currentJob: Job? = null
+    private var contentJob: Job? = null
+    private var groupsJob: Job? = null
 
     init {
+        // [Requirement] Default tab is SERIES
+        _uiState.value = _uiState.value.copy(selectedTab = StreamType.SERIES)
+
         loadPlaylists()
+        observeFavorites()
     }
 
-    private fun setLoading(message: String?) {
-        _uiState.update { it.copy(loadingMessage = message) }
-    }
-
-    fun loadPlaylists() {
+    private fun loadPlaylists() {
         viewModelScope.launch {
-            setLoading("Locating Profiles...")
-            // Artificial delay for "feel" (users trust loading screens that last >0.5s)
-            delay(800)
-
-            repository.getPlaylists().collect { playlists ->
-                _uiState.update {
-                    it.copy(
-                        playlists = playlists,
-                        loadingMessage = null // Done
-                    )
+            // FIX: Use property access 'playlists' instead of 'getPlaylists()'
+            repository.playlists.collect { playlists ->
+                _uiState.value = _uiState.value.copy(playlists = playlists)
+                if (_uiState.value.selectedPlaylist == null && playlists.isNotEmpty()) {
+                    selectPlaylist(playlists.first())
                 }
             }
         }
     }
 
-    fun selectPlaylist(playlist: Playlist) {
-        _uiState.update { it.copy(selectedPlaylist = playlist) }
-        loadContent(playlist)
+    private fun observeFavorites() {
+        viewModelScope.launch {
+            // FIX: Use property access 'favorites' instead of 'getFavorites()'
+            repository.favorites.collect { favs ->
+                _uiState.value = _uiState.value.copy(favorites = favs)
+            }
+        }
     }
 
-    fun backToPlaylists() {
-        // Cancel any active loading
-        currentJob?.cancel()
-        _uiState.update {
-            HomeState(
-                playlists = it.playlists, // Keep loaded playlists
-                loadingMessage = null
-            )
-        }
+    fun selectPlaylist(playlist: Playlist) {
+        _uiState.value = _uiState.value.copy(
+            selectedPlaylist = playlist,
+            isLoading = true
+        )
+        refreshContent()
     }
 
     fun selectTab(tab: StreamType) {
-        if (_uiState.value.selectedTab == tab) return
-        _uiState.update { it.copy(selectedTab = tab) }
-        // Reload content for the new tab
-        _uiState.value.selectedPlaylist?.let { loadContent(it) }
+        _uiState.value = _uiState.value.copy(
+            selectedTab = tab,
+            selectedCategory = "All"
+        )
+        refreshContent()
     }
 
     fun selectCategory(category: String) {
-        _uiState.update { state ->
-            val allChannels = state.displayedChannels
-            // In a real app, you'd filter the master list here.
-            // For now, we just update the selection UI state.
-            state.copy(selectedCategory = category)
-        }
-        // Ideally trigger a filter function here
+        _uiState.value = _uiState.value.copy(selectedCategory = category)
+        loadChannels()
     }
 
-    // --- SPOTLIGHT LOGIC ---
-    fun updateSpotlight(channel: Channel) {
-        // Debounce could be added here if performance suffers,
-        // but simple state update is usually cheap enough.
-        if (_uiState.value.spotlightChannel?.id != channel.id) {
-            _uiState.update { it.copy(spotlightChannel = channel) }
-        }
+    private fun refreshContent() {
+        loadGroups()
+        loadChannels()
+        refreshContinueWatching()
     }
 
-    private fun loadContent(playlist: Playlist) {
-        currentJob?.cancel()
-        currentJob = viewModelScope.launch {
-            val typeName = _uiState.value.selectedTab.name
+    private fun loadGroups() {
+        val playlist = _uiState.value.selectedPlaylist ?: return
+        val type = _uiState.value.selectedTab.name
 
-            setLoading("Syncing ${typeName} Library...")
+        groupsJob?.cancel()
+        // FIX: 'getGroups' is correct
+        groupsJob = repository.getGroups(playlist.url, type)
+            .onEach { groups ->
+                val smartCategories = mutableListOf("All")
+                smartCategories.add("Favorites")
 
-            // 1. Get Categories (Fast)
-            val categories = repository.getCategories(playlist.id, typeName)
+                if (_uiState.value.selectedTab != StreamType.LIVE) {
+                    smartCategories.add("Recently Added")
+                    smartCategories.add("Continue Watching")
+                }
+                smartCategories.addAll(groups)
 
-            setLoading("Curating Content...")
+                _uiState.value = _uiState.value.copy(categories = smartCategories)
+            }
+            .launchIn(viewModelScope)
+    }
 
-            // 2. Get Channels (Heavier)
-            // For "Lite" version, we limit to first 500 to prevent OOM on grid
-            val channels = repository.getChannelsWithPrograms(playlist.id, typeName)
-                .take(500)
+    private fun loadChannels() {
+        val playlist = _uiState.value.selectedPlaylist ?: return
+        val type = _uiState.value.selectedTab
+        val category = _uiState.value.selectedCategory
 
-            // 3. Get Favorites / History
-            val favorites = repository.getFavorites(playlist.id)
-            val history = repository.getContinueWatching(playlist.id)
+        contentJob?.cancel()
+        _uiState.value = _uiState.value.copy(isLoading = true)
 
-            _uiState.update { state ->
-                // Set initial spotlight to the first item found (if any)
-                val firstItem = channels.firstOrNull()?.channel
-                    ?: history.firstOrNull()
-                    ?: favorites.firstOrNull()
-
-                state.copy(
-                    categories = categories.map { it.name },
-                    displayedChannels = channels,
-                    favorites = favorites,
-                    continueWatching = history,
-                    loadingMessage = null,
-                    spotlightChannel = firstItem
-                )
+        val flow = when (category) {
+            "All" -> {
+                // FIX: Use 'getBrowsingContent'
+                repository.getBrowsingContent(playlist.url, type, "All")
+            }
+            "Favorites" -> {
+                repository.favorites.map { allFavs ->
+                    allFavs.filter { it.type == type.name }
+                        .map { ChannelWithProgram(it, null) }
+                }
+            }
+            "Recently Added" -> {
+                repository.getRecentAdded(playlist.url, type)
+                    .map { channels -> channels.map { ChannelWithProgram(it, null) } }
+            }
+            "Continue Watching" -> {
+                repository.getContinueWatching(type)
+                    .map { progressItems ->
+                        progressItems.map { ChannelWithProgram(it.channel, null) }
+                    }
+            }
+            else -> {
+                // FIX: Use 'getBrowsingContent'
+                repository.getBrowsingContent(playlist.url, type, category)
             }
         }
+
+        contentJob = flow.onEach { items ->
+            _uiState.value = _uiState.value.copy(
+                displayedChannels = items,
+                isLoading = false
+            )
+        }.launchIn(viewModelScope)
+    }
+
+    fun refreshContinueWatching() {
+        val tab = _uiState.value.selectedTab
+        viewModelScope.launch {
+            try {
+                repository.getContinueWatching(tab).collect { progressList ->
+                    val channels = progressList.map { it.channel }
+                    _uiState.value = _uiState.value.copy(continueWatching = channels)
+                }
+            } catch (e: Exception) {
+            }
+        }
+    }
+
+    fun backToPlaylists() {
+        _uiState.value = _uiState.value.copy(selectedPlaylist = null)
     }
 }
