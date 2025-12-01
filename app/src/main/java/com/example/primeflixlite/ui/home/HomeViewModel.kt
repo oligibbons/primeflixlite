@@ -111,6 +111,7 @@ class HomeViewModel @Inject constructor(
         contentJob?.cancel()
         _uiState.value = _uiState.value.copy(loadingMessage = "Loading Content...")
 
+        // Robust flow selection without ambiguity
         val flow = when (category) {
             "All" -> {
                 repository.getBrowsingContent(playlist.url, type, "All")
