@@ -6,6 +6,7 @@ import com.example.primeflixlite.data.local.PrimeFlixDatabase
 import com.example.primeflixlite.data.local.dao.*
 import com.example.primeflixlite.data.local.entity.*
 import com.example.primeflixlite.data.local.model.ChannelWithProgram
+import com.example.primeflixlite.data.local.model.ProgramProgress
 import com.example.primeflixlite.data.parser.m3u.M3UParser
 import com.example.primeflixlite.data.parser.m3u.toChannel
 import com.example.primeflixlite.data.parser.xmltv.XmltvParser
@@ -261,7 +262,6 @@ class PrimeFlixRepository @Inject constructor(
     }
 
     // Helper used by PlayerViewModel
-    // FIX: Calling channelDao.getVodChannels (Flow) not getChannelsByGroup (List)
     fun getVodChannels(playlistUrl: String, type: String, group: String): Flow<List<Channel>> {
         return channelDao.getVodChannels(playlistUrl, type, group)
     }

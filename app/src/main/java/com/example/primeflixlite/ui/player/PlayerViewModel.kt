@@ -1,196 +1,198 @@
 package com.example.primeflixlite.ui.player
 
-import android.content.Context
-import android.util.Log
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import android.net.Uri
+import androidx.annotation.OptIn
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import com.example.primeflixlite.data.local.entity.Channel
-import com.example.primeflixlite.data.local.entity.Programme
 import com.example.primeflixlite.data.repository.PrimeFlixRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class PlayerUiState(
-    val currentChannel: Channel? = null,
-    val currentProgram: Programme? = null,
-    val isPlaying: Boolean = true,
-    val resizeMode: Int = 0,
-    val playlistContext: List<Channel> = emptyList()
-)
-
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
+    application: Application,
+    savedStateHandle: SavedStateHandle,
     private val repository: PrimeFlixRepository
-) : ViewModel() {
+) : AndroidViewModel(application) {
+
+    // Retrieve the URL passed via Navigation arguments
+    private val videoUrl: String = savedStateHandle.get<String>("videoUrl") ?: ""
+
+    private var _player: ExoPlayer? = null
+    val player: ExoPlayer? get() = _player
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState = _uiState.asStateFlow()
 
-    var player: ExoPlayer? = null
-        private set
+    // Using your full repo, we can fetch the channel context
+    private var currentChannel: Channel? = null
 
-    private var progressJob: Job? = null
+    data class PlayerUiState(
+        val isLoading: Boolean = true,
+        val isBuffering: Boolean = false,
+        val isError: Boolean = false,
+        val errorMessage: String? = null,
+        val isControlsVisible: Boolean = false,
+        val videoTitle: String = ""
+    )
 
-    fun loadContextForUrl(url: String) {
+    init {
+        initializePlayer()
+        fetchChannelInfo()
+    }
+
+    private fun fetchChannelInfo() {
         viewModelScope.launch {
-            val channel = repository.getChannelByUrl(url)
-            if (channel != null) {
-                _uiState.update { it.copy(currentChannel = channel) }
-                loadEpgForChannel(channel)
+            if (videoUrl.isNotBlank()) {
+                currentChannel = repository.getChannelByUrl(videoUrl)
+                currentChannel?.let {
+                    _uiState.value = _uiState.value.copy(videoTitle = it.title)
 
-                try {
-                    repository.getVodChannels(
-                        playlistUrl = channel.playlistUrl,
-                        type = channel.type,
-                        group = channel.group
-                    ).collect { neighbors ->
-                        _uiState.update { it.copy(playlistContext = neighbors) }
+                    // Restore progress if VOD
+                    if (it.type != "LIVE") {
+                        // Logic to seek to resume position could go here
                     }
-                } catch (e: Exception) {
-                    Log.e("PlayerVM", "Failed to load context", e)
                 }
             }
         }
     }
 
-    fun updateCurrentChannel(channel: Channel) {
-        _uiState.update { it.copy(currentChannel = channel) }
-        loadEpgForChannel(channel)
-    }
+    @OptIn(UnstableApi::class)
+    private fun initializePlayer() {
+        if (videoUrl.isBlank()) {
+            _uiState.value = _uiState.value.copy(isError = true, errorMessage = "Invalid Stream URL")
+            return
+        }
 
-    private fun initializePlayerSafely(context: Context, channel: Channel) {
-        releasePlayer()
         try {
-            player = ExoPlayer.Builder(context)
+            // Track Selector for adaptive streaming on low-end devices
+            val trackSelector = DefaultTrackSelector(getApplication())
+            trackSelector.setParameters(
+                trackSelector.buildUponParameters()
+                    .setMaxVideoSizeSd() // Prefer SD on 1GB RAM if available to prevent OOM/Stutter
+                    .setForceLowestBitrate(false)
+            )
+
+            _player = ExoPlayer.Builder(getApplication())
+                .setTrackSelector(trackSelector)
                 .build()
                 .apply {
-                    setMediaItem(MediaItem.fromUri(channel.url))
-                    prepare()
                     playWhenReady = true
-                    addListener(object : Player.Listener {
-                        override fun onIsPlayingChanged(isPlaying: Boolean) {
-                            _uiState.update { it.copy(isPlaying = isPlaying) }
-                            if (isPlaying) startProgressTracking()
-                            else stopProgressTracking()
-                        }
-
-                        override fun onPlayerError(error: PlaybackException) {
-                            Log.e("PlayerViewModel", "ExoPlayer Critical Error", error)
-                        }
-                    })
+                    addListener(playerListener)
                 }
+
+            val mediaSource = buildMediaSource(Uri.parse(videoUrl))
+            _player?.setMediaSource(mediaSource)
+            _player?.prepare()
+
         } catch (e: Exception) {
-            Log.e("PlayerViewModel", "Crash prevented during player init", e)
+            _uiState.value = _uiState.value.copy(isError = true, errorMessage = e.localizedMessage)
         }
     }
 
-    fun nextChannel() {
-        val current = _uiState.value.currentChannel ?: return
-        val list = _uiState.value.playlistContext
-        if (list.isEmpty()) return
+    @OptIn(UnstableApi::class)
+    private fun buildMediaSource(uri: Uri): MediaSource {
+        val userAgent = "PrimeFlixLite/1.0 (Linux;Android 11) ExoPlayerLib/2.19.1"
+        val dataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent(userAgent)
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(8000)
+            .setReadTimeoutMs(8000)
 
-        val index = list.indexOfFirst { it.url == current.url }
-        if (index != -1) {
-            val nextIndex = if (index + 1 < list.size) index + 1 else 0
-            switchChannel(list[nextIndex])
+        val type = androidx.media3.common.util.Util.inferContentType(uri)
+        return if (type == C.CONTENT_TYPE_HLS) {
+            HlsMediaSource.Factory(dataSourceFactory).createMediaSource(MediaItem.fromUri(uri))
+        } else {
+            ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(MediaItem.fromUri(uri))
         }
     }
 
-    fun prevChannel() {
-        val current = _uiState.value.currentChannel ?: return
-        val list = _uiState.value.playlistContext
-        if (list.isEmpty()) return
-
-        val index = list.indexOfFirst { it.url == current.url }
-        if (index != -1) {
-            val prevIndex = if (index - 1 >= 0) index - 1 else list.lastIndex
-            switchChannel(list[prevIndex])
+    private val playerListener = object : Player.Listener {
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            when (playbackState) {
+                Player.STATE_BUFFERING -> {
+                    _uiState.value = _uiState.value.copy(isBuffering = true, isLoading = false)
+                }
+                Player.STATE_READY -> {
+                    _uiState.value = _uiState.value.copy(isBuffering = false, isLoading = false, isError = false)
+                }
+                Player.STATE_ENDED -> {
+                    // Handle end of content
+                }
+                Player.STATE_IDLE -> { }
+            }
         }
-    }
 
-    private fun switchChannel(channel: Channel) {
-        updateCurrentChannel(channel)
-        player?.apply {
-            setMediaItem(MediaItem.fromUri(channel.url))
-            prepare()
-            play()
+        override fun onPlayerError(error: PlaybackException) {
+            _uiState.value = _uiState.value.copy(
+                isError = true,
+                errorMessage = "Stream Error: ${error.errorCodeName}",
+                isLoading = false
+            )
         }
-    }
 
-    fun toggleFavorite() {
-        val current = _uiState.value.currentChannel ?: return
-        viewModelScope.launch {
-            repository.toggleFavorite(current)
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (isPlaying) {
+                startProgressTracking()
+            }
         }
-    }
-
-    private fun loadEpgForChannel(channel: Channel) {
-        viewModelScope.launch {
-            val epgId = channel.relationId ?: channel.title
-            val program = repository.getCurrentProgram(epgId)
-            _uiState.update { it.copy(currentProgram = program) }
-        }
-    }
-
-    fun playPause() {
-        player?.let {
-            if (it.isPlaying) it.pause() else it.play()
-        }
-    }
-
-    fun seek(position: Long) {
-        player?.seekTo(position)
-    }
-
-    fun toggleResizeMode() {
-        val newMode = (_uiState.value.resizeMode + 1) % 3
-        _uiState.update { it.copy(resizeMode = newMode) }
     }
 
     private fun startProgressTracking() {
-        progressJob?.cancel()
-        progressJob = viewModelScope.launch {
-            while (isActive) {
-                delay(10_000)
-                saveCurrentProgress()
+        viewModelScope.launch {
+            while(_player?.isPlaying == true) {
+                val currentPos = _player?.currentPosition ?: 0L
+                val duration = _player?.duration ?: 0L
+                if (duration > 0 && videoUrl.isNotBlank()) {
+                    repository.saveProgress(videoUrl, currentPos, duration)
+                }
+                delay(5000) // Update every 5 seconds
             }
         }
     }
 
-    private fun stopProgressTracking() {
-        progressJob?.cancel()
-        saveCurrentProgress()
-    }
-
-    private fun saveCurrentProgress() {
-        val p = player ?: return
-        val c = _uiState.value.currentChannel ?: return
-        if (p.duration > 0) {
-            viewModelScope.launch {
-                repository.saveProgress(c.url, p.currentPosition, p.duration)
-            }
+    fun showControls() {
+        _uiState.value = _uiState.value.copy(isControlsVisible = true)
+        // Auto-hide after 5 seconds
+        viewModelScope.launch {
+            delay(5000)
+            _uiState.value = _uiState.value.copy(isControlsVisible = false)
         }
     }
 
-    fun releasePlayer() {
-        stopProgressTracking()
-        player?.release()
-        player = null
+    fun togglePlayPause() {
+        _player?.let {
+            if (it.isPlaying) it.pause() else it.play()
+            showControls()
+        }
     }
 
     override fun onCleared() {
         super.onCleared()
         releasePlayer()
+    }
+
+    fun releasePlayer() {
+        _player?.removeListener(playerListener)
+        _player?.release()
+        _player = null
     }
 }

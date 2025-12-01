@@ -37,14 +37,19 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun syncPlaylist(playlist: Playlist) {
-        // Updated for Background Sync:
-        // We trigger the sync via repository (which now uses Application Scope).
-        // We do NOT wait for it to finish here.
-        // We just show a quick toast saying "Sync Started".
-
+        // Trigger Background Sync via Repository
         repository.syncPlaylist(playlist)
 
-        _uiState.value = _uiState.value.copy(message = "Background Sync Started...")
+        // Show immediate feedback on UI
+        _uiState.value = _uiState.value.copy(
+            message = "Sync started for ${playlist.title}..."
+        )
+
+        // Clear message after delay
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(5000)
+            _uiState.value = _uiState.value.copy(message = null)
+        }
     }
 
     fun deletePlaylist(playlist: Playlist) {

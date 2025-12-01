@@ -73,7 +73,7 @@ class MainActivity : ComponentActivity() {
                         val viewModel = hiltViewModel<HomeViewModel>()
                         HomeScreen(
                             viewModel = viewModel,
-                            imageLoader = imageLoader,
+                            imageLoader = imageLoader, // FIXED: Passed injected imageLoader
                             onChannelClick = { channel ->
                                 if (channel.type == "LIVE") {
                                     // Navigate to Player with Encoded URL
@@ -87,11 +87,12 @@ class MainActivity : ComponentActivity() {
                             onSearchClick = { navController.navigate("search") },
                             onAddAccountClick = { navController.navigate("add_xtream") },
                             onGuideClick = {
-                                val group = viewModel.uiState.value.selectedCategory
-                                val encodedGroup = URLEncoder.encode(group, StandardCharsets.UTF_8.toString())
-                                navController.navigate("guide/$encodedGroup")
+                                // FIXED: Added parameter. Navigates to Guide with default "All" group
+                                navController.navigate("guide/All")
                             },
-                            onSettingsClick = { navController.navigate("settings") }
+                            onSettingsClick = { // FIXED: Renamed from onNavigateToSettings
+                                navController.navigate("settings")
+                            }
                         )
                     }
 
@@ -157,13 +158,13 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    // 6. GUIDE
+                    // 6. GUIDE (Optional - kept for future linking)
                     composable("guide/{group}") { backStackEntry ->
                         val groupEncoded = backStackEntry.arguments?.getString("group") ?: "All"
                         val group = URLDecoder.decode(groupEncoded, StandardCharsets.UTF_8.toString())
 
                         val viewModel = hiltViewModel<GuideViewModel>()
-                        val homeVM = hiltViewModel<HomeViewModel>() // Re-using for playlist context
+                        val homeVM = hiltViewModel<HomeViewModel>()
 
                         LaunchedEffect(group) {
                             val playlist = homeVM.uiState.value.selectedPlaylist

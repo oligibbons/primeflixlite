@@ -1,24 +1,23 @@
 package com.example.primeflixlite.ui.home
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.primeflixlite.data.local.entity.Playlist
 import com.example.primeflixlite.data.local.entity.StreamType
 import com.example.primeflixlite.data.local.model.ChannelWithProgram
 import com.example.primeflixlite.data.repository.PrimeFlixRepository
-import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
-@HiltViewModel
-class HomeViewModel @Inject constructor(
+class HomeViewModel @AssistedInject constructor(
     private val repository: PrimeFlixRepository
 ) : ViewModel() {
 
@@ -117,11 +116,9 @@ class HomeViewModel @Inject constructor(
                 repository.getBrowsingContent(playlist.url, type, "All")
             }
             "Favorites" -> {
-                // Fix for ambiguity: Use kotlinx.coroutines.flow.map explicitly for the outer map
-                // Return a flow that emits the list of favorites filtered by type and playlist
-                repository.favorites.map { favs ->
-                    favs.filter { it.playlistUrl == playlist.url && it.type == type.name }
-                        .map { ChannelWithProgram(it, null) }
+                // Fixed: Map the repository.favorites flow directly
+                repository.favorites.map { channels ->
+                    channels.map { ChannelWithProgram(it, null) }
                 }
             }
             "Recently Added" -> {
@@ -162,5 +159,22 @@ class HomeViewModel @Inject constructor(
 
     fun backToPlaylists() {
         _uiState.value = _uiState.value.copy(selectedPlaylist = null)
+    }
+
+    // Factory pattern required for AssistedInject with Hilt
+    @AssistedFactory
+    interface Factory {
+        fun create(): HomeViewModel
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    companion object {
+        fun provideFactory(
+            assistedFactory: Factory
+        ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                return assistedFactory.create() as T
+            }
+        }
     }
 }

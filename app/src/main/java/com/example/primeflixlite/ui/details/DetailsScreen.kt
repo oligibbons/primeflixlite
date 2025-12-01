@@ -1,6 +1,5 @@
 package com.example.primeflixlite.ui.details
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,277 +11,235 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.primeflixlite.data.local.entity.Channel
-import com.example.primeflixlite.data.local.entity.StreamType
-import com.example.primeflixlite.data.parser.xtream.XtreamChannelInfo
-import com.example.primeflixlite.ui.theme.*
+import com.example.primeflixlite.ui.theme.NeonBlue
+import com.example.primeflixlite.ui.theme.VoidBlack
 
 @Composable
 fun DetailsScreen(
-    channel: Channel,
+    channel: Channel, // Placeholder passed from nav
     viewModel: DetailsViewModel,
     imageLoader: coil.ImageLoader,
     onPlayClick: (String) -> Unit,
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val meta = uiState.metadata
-    val displayChannel = viewModel.currentChannel.collectAsState().value ?: channel
-    val context = LocalContext.current
+    val playButtonFocus = remember { FocusRequester() }
 
-    LaunchedEffect(channel) {
-        viewModel.loadContent(channel)
+    // Auto-focus Play button when data loads
+    LaunchedEffect(uiState.isLoading) {
+        if (!uiState.isLoading) {
+            playButtonFocus.requestFocus()
+        }
     }
 
-    BackHandler { onBack() }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(VoidBlack)
+    ) {
+        if (uiState.isLoading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = NeonBlue)
+            }
+        } else {
+            val currentChannel = uiState.channel ?: channel
+            val metadata = uiState.metadata
 
-    // --- 1. BACKGROUND LAYER ---
-    Box(modifier = Modifier.fillMaxSize().background(VoidBlack)) {
-        val backdropUrl = meta?.backdropPath?.let { "https://image.tmdb.org/t/p/w1280$it" }
-            ?: displayChannel.cover
+            // Background Backdrop
+            if (!metadata?.backdrop.isNullOrEmpty()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(metadata?.backdrop)
+                        .crossfade(true)
+                        .size(1280, 720) // Limit size for memory
+                        .build(),
+                    imageLoader = imageLoader,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().alpha(0.3f) // Dimmed
+                )
+            }
 
-        if (!backdropUrl.isNullOrEmpty()) {
-            AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(backdropUrl)
-                    .size(1280, 720)
-                    .crossfade(true)
-                    .build(),
-                imageLoader = imageLoader,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .alpha(0.3f) // Darkened for readability
-            )
-            // Gradient Overlay (Top to Bottom)
+            // Gradient Overlay
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, VoidBlack),
-                            startY = 0f,
-                            endY = 800f
+                        Brush.horizontalGradient(
+                            colors = listOf(Color.Black, Color.Black.copy(alpha = 0.6f), Color.Transparent)
                         )
                     )
             )
-        }
 
-        // --- 2. CONTENT LAYER ---
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(48.dp)
-        ) {
-            // LEFT: POSTER
-            Card(
-                shape = RoundedCornerShape(12.dp),
-                elevation = CardDefaults.cardElevation(12.dp),
-                modifier = Modifier.width(300.dp).aspectRatio(2f/3f)
+            // Content Layout
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(48.dp),
+                horizontalArrangement = Arrangement.spacedBy(32.dp)
             ) {
-                val posterUrl = meta?.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" }
-                    ?: displayChannel.cover
-
-                if (!posterUrl.isNullOrEmpty()) {
+                // Left: Poster
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(2.dp, Color(0xFF333333)),
+                    modifier = Modifier
+                        .width(200.dp)
+                        .aspectRatio(2f / 3f)
+                ) {
                     AsyncImage(
-                        model = ImageRequest.Builder(context).data(posterUrl).size(400, 600).build(),
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(currentChannel.cover)
+                            .crossfade(true)
+                            .build(),
                         imageLoader = imageLoader,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
-                } else {
-                    Box(Modifier.fillMaxSize().background(OffBlack))
                 }
-            }
 
-            Spacer(Modifier.width(48.dp))
-
-            // RIGHT: INFO & CONTROLS
-            Column(modifier = Modifier.weight(1f)) {
-
-                // Title
-                Text(
-                    text = meta?.title ?: displayChannel.title,
-                    style = MaterialTheme.typography.displayMedium,
-                    color = White,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                // Meta Row (Year | Genre | Rating)
-                Row(
-                    modifier = Modifier.padding(vertical = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                // Right: Info & Actions
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    if (meta?.voteAverage != null && meta.voteAverage > 0) {
-                        Badge(text = "★ ${String.format("%.1f", meta.voteAverage)}", color = NeonYellow)
-                    }
-                    if (!meta?.genres.isNullOrEmpty()) {
-                        Text(text = meta!!.genres, color = LightGray, style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-
-                // Description
-                Text(
-                    text = meta?.overview ?: "No description available.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = LightGray,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(bottom = 32.dp)
-                )
-
-                // ACTIONS ROW
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    // Primary Play Button
-                    val playUrl = if (uiState.versions.isNotEmpty()) uiState.versions.first().url else displayChannel.url
-                    NeonButton(
-                        text = "PLAY MOVIE",
-                        icon = Icons.Default.PlayArrow,
-                        isPrimary = true,
-                        onClick = { onPlayClick(playUrl) }
+                    Text(
+                        text = currentChannel.title,
+                        style = MaterialTheme.typography.displaySmall,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
                     )
 
-                    // Series Season Selector (if applicable)
-                    if (displayChannel.type == StreamType.SERIES.name && uiState.episodes.isNotEmpty()) {
-                        val seasons = viewModel.getSeasons()
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(seasons) { seasonNum ->
-                                FilterChip(
-                                    selected = viewModel.selectedSeason == seasonNum,
-                                    onClick = { viewModel.selectedSeason = seasonNum },
-                                    label = { Text("Season $seasonNum") },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = NeonBlue,
-                                        labelColor = White
-                                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Text(text = metadata?.year ?: "", color = Color.Gray)
+                        Text(text = metadata?.rating ?: "", color = NeonBlue)
+                        Text(text = currentChannel.quality ?: "HD", color = Color.Gray)
+                    }
+
+                    Text(
+                        text = metadata?.plot ?: "No description available.",
+                        color = Color.LightGray,
+                        maxLines = 4,
+                        lineHeight = 24.sp,
+                        modifier = Modifier.width(600.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Action Buttons
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        ActionButton(
+                            text = "PLAY",
+                            icon = Icons.Default.PlayArrow,
+                            isPrimary = true,
+                            focusRequester = playButtonFocus,
+                            onClick = { onPlayClick(currentChannel.url) }
+                        )
+
+                        ActionButton(
+                            text = if (uiState.isFavorite) "SAVED" else "FAVORITE",
+                            icon = Icons.Default.Star,
+                            isPrimary = false,
+                            onClick = { viewModel.toggleFavorite() }
+                        )
+
+                        ActionButton(
+                            text = "BACK",
+                            icon = Icons.Default.ArrowBack,
+                            isPrimary = false,
+                            onClick = onBack
+                        )
+                    }
+
+                    // Versions / Episodes (if available)
+                    if (uiState.relatedVersions.size > 1) {
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text("VERSIONS", color = Color.Gray, fontSize = 14.sp)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            items(uiState.relatedVersions) { version ->
+                                VersionChip(
+                                    text = version.quality ?: "UNK",
+                                    onClick = { onPlayClick(version.url) }
                                 )
                             }
                         }
                     }
                 }
-
-                // EPISODE LIST (For Series)
-                if (displayChannel.type == StreamType.SERIES.name) {
-                    Spacer(Modifier.height(24.dp))
-                    Text("EPISODES", color = NeonBlue, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(12.dp))
-
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = PaddingValues(bottom = 24.dp)
-                    ) {
-                        items(viewModel.getEpisodesForSeason(viewModel.selectedSeason)) { episode ->
-                            EpisodeRow(
-                                episode = episode,
-                                onClick = {
-                                    // Construct URL logic here same as before
-                                    val ext = episode.containerExtension ?: "mkv"
-                                    val url = "${displayChannel.url.substringBefore("/series/")}/series/${displayChannel.url.split("/")[4]}/${displayChannel.url.split("/")[5]}/${episode.id}.$ext"
-                                    onPlayClick(url)
-                                }
-                            )
-                        }
-                    }
-                }
             }
         }
     }
 }
 
 @Composable
-fun NeonButton(
+fun ActionButton(
     text: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
-    isPrimary: Boolean = false,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    isPrimary: Boolean,
+    focusRequester: FocusRequester = remember { FocusRequester() },
     onClick: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val backgroundColor = if (isFocused) Color.White else if (isPrimary) NeonBlue else Color(0xFF333333)
+    val contentColor = if (isFocused) Color.Black else if (isPrimary) Color.Black else Color.White
 
     Button(
         onClick = onClick,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (isFocused) White else if (isPrimary) NeonYellow else OffBlack,
-            contentColor = if (isFocused) VoidBlack else if (isPrimary) VoidBlack else White
-        ),
-        shape = RoundedCornerShape(8.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = backgroundColor),
         modifier = Modifier
-            .height(48.dp)
+            .focusRequester(focusRequester)
             .onFocusChanged { isFocused = it.isFocused }
-            .scale(if (isFocused) 1.05f else 1f)
-            .border(
-                width = if (!isPrimary && !isFocused) 2.dp else 0.dp,
-                color = if (!isPrimary && !isFocused) Color.Gray else Color.Transparent,
-                shape = RoundedCornerShape(8.dp)
-            )
+            .focusable()
     ) {
-        if (icon != null) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
-        }
-        Text(text = text, fontWeight = FontWeight.Bold)
+        Icon(icon, contentDescription = null, tint = contentColor)
+        Spacer(Modifier.width(8.dp))
+        Text(text, color = contentColor, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
-fun EpisodeRow(episode: XtreamChannelInfo.Episode, onClick: () -> Unit) {
+fun VersionChip(text: String, onClick: () -> Unit) {
     var isFocused by remember { mutableStateOf(false) }
+    val border = if (isFocused) NeonBlue else Color.Gray
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (isFocused) White else OffBlack)
-            .clickable { onClick() }
-            .onFocusChanged { isFocused = it.isFocused }
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = "${episode.episodeNum}",
-            color = if (isFocused) VoidBlack else NeonBlue,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.width(40.dp)
-        )
-        Text(
-            text = episode.title ?: "Episode ${episode.episodeNum}",
-            color = if (isFocused) VoidBlack else White,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
-fun Badge(text: String, color: Color) {
     Box(
         modifier = Modifier
-            .border(1.dp, color, RoundedCornerShape(4.dp))
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .border(1.dp, border, RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(4.dp))
+            .clickable { onClick() }
+            .onFocusChanged { isFocused = it.isFocused }
+            .focusable()
+            .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
-        Text(text = text, color = color, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+        Text(text, color = Color.White)
     }
 }
+
+// Helper Modifier for Alpha
+fun Modifier.alpha(alpha: Float) = this.then(
+    Modifier.draw.drawWithContent {
+        drawContent()
+        drawRect(Color.Black, alpha = 1f - alpha, blendMode = androidx.compose.ui.graphics.BlendMode.DstIn)
+    }
+)
