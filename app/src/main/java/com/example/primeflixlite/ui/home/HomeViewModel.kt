@@ -21,7 +21,8 @@ class HomeViewModel @Inject constructor(
     private val repository: PrimeFlixRepository
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(HomeUiState())
+    // Ensure this uses HomeState, NOT HomeUiState
+    private val _uiState = MutableStateFlow(HomeState())
     val uiState = _uiState.asStateFlow()
 
     private var contentJob: Job? = null
@@ -37,7 +38,6 @@ class HomeViewModel @Inject constructor(
 
     private fun loadPlaylists() {
         viewModelScope.launch {
-            // FIX: Use property access 'playlists' instead of 'getPlaylists()'
             repository.playlists.collect { playlists ->
                 _uiState.value = _uiState.value.copy(playlists = playlists)
                 if (_uiState.value.selectedPlaylist == null && playlists.isNotEmpty()) {
@@ -49,7 +49,6 @@ class HomeViewModel @Inject constructor(
 
     private fun observeFavorites() {
         viewModelScope.launch {
-            // FIX: Use property access 'favorites' instead of 'getFavorites()'
             repository.favorites.collect { favs ->
                 _uiState.value = _uiState.value.copy(favorites = favs)
             }
@@ -59,7 +58,7 @@ class HomeViewModel @Inject constructor(
     fun selectPlaylist(playlist: Playlist) {
         _uiState.value = _uiState.value.copy(
             selectedPlaylist = playlist,
-            isLoading = true
+            loadingMessage = "Loading Playlist..." // FIX: Use loadingMessage, NOT isLoading
         )
         refreshContent()
     }
@@ -88,7 +87,6 @@ class HomeViewModel @Inject constructor(
         val type = _uiState.value.selectedTab.name
 
         groupsJob?.cancel()
-        // FIX: 'getGroups' is correct
         groupsJob = repository.getGroups(playlist.url, type)
             .onEach { groups ->
                 val smartCategories = mutableListOf("All")
@@ -111,11 +109,11 @@ class HomeViewModel @Inject constructor(
         val category = _uiState.value.selectedCategory
 
         contentJob?.cancel()
-        _uiState.value = _uiState.value.copy(isLoading = true)
+        // FIX: Use loadingMessage
+        _uiState.value = _uiState.value.copy(loadingMessage = "Loading Content...")
 
         val flow = when (category) {
             "All" -> {
-                // FIX: Use 'getBrowsingContent'
                 repository.getBrowsingContent(playlist.url, type, "All")
             }
             "Favorites" -> {
@@ -135,7 +133,6 @@ class HomeViewModel @Inject constructor(
                     }
             }
             else -> {
-                // FIX: Use 'getBrowsingContent'
                 repository.getBrowsingContent(playlist.url, type, category)
             }
         }
@@ -143,7 +140,7 @@ class HomeViewModel @Inject constructor(
         contentJob = flow.onEach { items ->
             _uiState.value = _uiState.value.copy(
                 displayedChannels = items,
-                isLoading = false
+                loadingMessage = null // FIX: Set to null to indicate loaded
             )
         }.launchIn(viewModelScope)
     }

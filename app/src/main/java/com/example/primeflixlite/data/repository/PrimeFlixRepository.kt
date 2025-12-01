@@ -255,6 +255,17 @@ class PrimeFlixRepository @Inject constructor(
         }
     }
 
+    // Helper used by GuideViewModel
+    fun getLiveChannels(playlistUrl: String, group: String): Flow<List<ChannelWithProgram>> {
+        return channelDao.getLiveChannels(playlistUrl, group, System.currentTimeMillis())
+    }
+
+    // Helper used by PlayerViewModel
+    // FIX: Using the Flow-based DAO method to avoid type mismatches
+    fun getVodChannels(playlistUrl: String, type: String, group: String): Flow<List<Channel>> {
+        return channelDao.getVodChannels(playlistUrl, type, group)
+    }
+
     // 2. Recent Added
     fun getRecentAdded(playlistUrl: String, type: StreamType) = channelDao.getRecentlyAdded(playlistUrl, type.name)
 

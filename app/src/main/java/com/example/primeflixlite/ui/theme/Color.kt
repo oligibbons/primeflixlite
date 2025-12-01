@@ -13,6 +13,7 @@ val PanelBlack = Color(0xFF0A0A0A)     // Sidebars / Overlays
 val NeonBlue = Color(0xFF0099FF)       // Primary Brand (Samsung TV Plus vibe)
 val NeonBlueDim = Color(0xFF004488)    // Inactive/Background elements
 val NeonYellow = Color(0xFFFFD600)     // FOCUS STATE (High Contrast / Cyberpunk)
+val BurntYellow = Color(0xFFFFC107)    // Secondary Accent
 
 // Text & functional
 val White = Color(0xFFFFFFFF)

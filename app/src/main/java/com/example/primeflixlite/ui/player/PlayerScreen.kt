@@ -9,14 +9,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
@@ -32,10 +30,10 @@ fun PlayerScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    // FIX: Using collectAsState() properly
     val uiState by viewModel.uiState.collectAsState()
 
     // --- PLAYER STATE ---
-    // We hold the ExoPlayer instance here to tie it to the Composable lifecycle
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
             playWhenReady = true
@@ -44,10 +42,8 @@ fun PlayerScreen(
 
     // Initialize / Update Player Media
     LaunchedEffect(url) {
-        // Load the channel context (neighbors) for the drawer
         viewModel.loadContextForUrl(url)
 
-        // Prepare the stream
         val mediaItem = MediaItem.fromUri(url)
         exoPlayer.setMediaItem(mediaItem)
         exoPlayer.prepare()
@@ -60,7 +56,7 @@ fun PlayerScreen(
         }
     }
 
-    // Pause/Resume on lifecycle changes (Backgrounding the app)
+    // Pause/Resume on lifecycle changes
     LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
         exoPlayer.pause()
     }
@@ -72,7 +68,6 @@ fun PlayerScreen(
     var isOsdVisible by remember { mutableStateOf(false) }
     var isChannelListVisible by remember { mutableStateOf(false) }
 
-    // Auto-hide timer
     val coroutineScope = rememberCoroutineScope()
     var hideJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
@@ -80,7 +75,7 @@ fun PlayerScreen(
         hideJob?.cancel()
         isOsdVisible = true
         hideJob = coroutineScope.launch {
-            delay(4000) // 4 seconds of idle time
+            delay(4000)
             isOsdVisible = false
             isChannelListVisible = false
         }
@@ -89,10 +84,8 @@ fun PlayerScreen(
     fun toggleChannelList() {
         hideJob?.cancel()
         isChannelListVisible = !isChannelListVisible
-        // If opening list, hide standard OSD; if closing, hide everything
         isOsdVisible = false
         if (isChannelListVisible) {
-            // Keep it open longer if interacting with list
             hideJob = coroutineScope.launch {
                 delay(8000)
                 isChannelListVisible = false
@@ -100,7 +93,6 @@ fun PlayerScreen(
         }
     }
 
-    // Handle Back Press
     BackHandler {
         if (isOsdVisible || isChannelListVisible) {
             isOsdVisible = false
@@ -110,21 +102,18 @@ fun PlayerScreen(
         }
     }
 
-    // --- UI COMPOSITION ---
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(VoidBlack)
-            // KEY EVENT INTERCEPTOR
-            // This is the "Remote Control" logic
             .onKeyEvent { event ->
                 if (event.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
-                    showControls() // Reset timer on any key
+                    showControls()
                     when (event.nativeKeyEvent.keyCode) {
                         KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
                         KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
                             if (!isChannelListVisible) isOsdVisible = true
-                            true // Handle it
+                            true
                         }
                         KeyEvent.KEYCODE_DPAD_LEFT -> {
                             if (!isOsdVisible && !isChannelListVisible) {
@@ -136,7 +125,7 @@ fun PlayerScreen(
                         }
                         KeyEvent.KEYCODE_DPAD_RIGHT -> {
                             if (isChannelListVisible) {
-                                toggleChannelList() // Close drawer
+                                toggleChannelList()
                                 true
                             } else {
                                 false
@@ -148,14 +137,13 @@ fun PlayerScreen(
                     false
                 }
             }
-            .focusable() // Important: Make the box focusable to catch keys
+            .focusable()
     ) {
-        // 1. VIDEO SURFACE
         AndroidView(
             factory = {
                 PlayerView(context).apply {
                     player = exoPlayer
-                    useController = false // We use our own overlay
+                    useController = false
                     resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
                     setBackgroundColor(android.graphics.Color.BLACK)
                 }
@@ -163,8 +151,6 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // 2. OVERLAY UI (Compose)
-        // We defer state updates to a LaunchedEffect loop to update UI progress
         var currentTime by remember { mutableLongStateOf(0L) }
         var duration by remember { mutableLongStateOf(0L) }
         var isPlaying by remember { mutableStateOf(true) }
@@ -193,19 +179,15 @@ fun PlayerScreen(
                 showControls()
             },
             onBack = onBack,
-            // Channel List Props
             isChannelListVisible = isChannelListVisible,
             channelList = uiState.playlistContext,
             onChannelClick = { channel ->
-                // Switch Channel Logic
                 val newMediaItem = MediaItem.fromUri(channel.url)
                 exoPlayer.setMediaItem(newMediaItem)
                 exoPlayer.prepare()
                 exoPlayer.play()
                 viewModel.updateCurrentChannel(channel)
-                // Keep drawer open but reset timer
                 showControls()
-                // Close standard OSD if it popped up
                 isOsdVisible = false
                 isChannelListVisible = true
             }

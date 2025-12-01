@@ -16,57 +16,65 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+// Combined UI State for the Screen
+data class PlayerUiState(
+    val currentChannel: Channel? = null,
+    val currentProgram: Programme? = null,
+    val isPlaying: Boolean = true,
+    val resizeMode: Int = 0,
+    val playlistContext: List<Channel> = emptyList() // The "neighbors" for the drawer
+)
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val repository: PrimeFlixRepository
 ) : ViewModel() {
 
-    private val _currentChannel = MutableStateFlow<Channel?>(null)
-    val currentChannel = _currentChannel.asStateFlow()
-
-    private val _currentProgram = MutableStateFlow<Programme?>(null)
-    val currentProgram = _currentProgram.asStateFlow()
-
-    private val _resizeMode = MutableStateFlow(0)
-    val resizeMode = _resizeMode.asStateFlow()
-
-    private val _isPlaying = MutableStateFlow(true)
-    val isPlaying = _isPlaying.asStateFlow()
+    private val _uiState = MutableStateFlow(PlayerUiState())
+    val uiState = _uiState.asStateFlow()
 
     var player: ExoPlayer? = null
         private set
 
-    private var playlistChannels: List<Channel> = emptyList()
     private var progressJob: Job? = null
 
-    fun initialize(context: Context, channel: Channel) {
-        if (player != null && _currentChannel.value?.url == channel.url) return
-
-        _currentChannel.value = channel
-        loadEpgForChannel(channel)
-        loadPlaylistContext(channel)
-
-        initializePlayerSafely(context, channel)
-    }
-
-    fun loadChannelById(id: Long) {
+    // Called by PlayerScreen to setup data
+    fun loadContextForUrl(url: String) {
         viewModelScope.launch {
-            val channel = repository.getChannelById(id)
+            val channel = repository.getChannelByUrl(url)
             if (channel != null) {
-                _currentChannel.value = channel
+                // Set initial channel
+                _uiState.update { it.copy(currentChannel = channel) }
                 loadEpgForChannel(channel)
-                loadPlaylistContext(channel)
+
+                // Load siblings for the drawer
+                try {
+                    repository.getVodChannels(
+                        playlistUrl = channel.playlistUrl,
+                        type = channel.type,
+                        group = channel.group
+                    ).collect { neighbors ->
+                        _uiState.update { it.copy(playlistContext = neighbors) }
+                    }
+                } catch (e: Exception) {
+                    Log.e("PlayerVM", "Failed to load context", e)
+                }
             }
         }
     }
 
+    fun updateCurrentChannel(channel: Channel) {
+        _uiState.update { it.copy(currentChannel = channel) }
+        loadEpgForChannel(channel)
+    }
+
     private fun initializePlayerSafely(context: Context, channel: Channel) {
         releasePlayer()
-
         try {
             player = ExoPlayer.Builder(context)
                 .build()
@@ -76,14 +84,13 @@ class PlayerViewModel @Inject constructor(
                     playWhenReady = true
                     addListener(object : Player.Listener {
                         override fun onIsPlayingChanged(isPlaying: Boolean) {
-                            _isPlaying.value = isPlaying
+                            _uiState.update { it.copy(isPlaying = isPlaying) }
                             if (isPlaying) startProgressTracking()
                             else stopProgressTracking()
                         }
 
                         override fun onPlayerError(error: PlaybackException) {
                             Log.e("PlayerViewModel", "ExoPlayer Critical Error", error)
-                            stop()
                         }
                     })
                 }
@@ -92,49 +99,33 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    private fun loadPlaylistContext(channel: Channel) {
-        viewModelScope.launch {
-            try {
-                // FIX: channel.playlistUrl and channel.group
-                repository.getVodChannels(
-                    playlistUrl = channel.playlistUrl,
-                    type = channel.type,
-                    group = channel.group
-                ).collect { channels ->
-                    playlistChannels = channels
-                }
-            } catch (e: Exception) {
-                Log.e("PlayerVM", "Failed to load playlist context", e)
-            }
-        }
-    }
-
+    // Called for channel zapping (Prev/Next)
     fun nextChannel() {
-        val current = _currentChannel.value ?: return
-        if (playlistChannels.isEmpty()) return
+        val current = _uiState.value.currentChannel ?: return
+        val list = _uiState.value.playlistContext
+        if (list.isEmpty()) return
 
-        val index = playlistChannels.indexOfFirst { it.url == current.url }
+        val index = list.indexOfFirst { it.url == current.url }
         if (index != -1) {
-            val nextIndex = if (index + 1 < playlistChannels.size) index + 1 else 0
-            switchChannel(playlistChannels[nextIndex])
+            val nextIndex = if (index + 1 < list.size) index + 1 else 0
+            switchChannel(list[nextIndex])
         }
     }
 
     fun prevChannel() {
-        val current = _currentChannel.value ?: return
-        if (playlistChannels.isEmpty()) return
+        val current = _uiState.value.currentChannel ?: return
+        val list = _uiState.value.playlistContext
+        if (list.isEmpty()) return
 
-        val index = playlistChannels.indexOfFirst { it.url == current.url }
+        val index = list.indexOfFirst { it.url == current.url }
         if (index != -1) {
-            val prevIndex = if (index - 1 >= 0) index - 1 else playlistChannels.lastIndex
-            switchChannel(playlistChannels[prevIndex])
+            val prevIndex = if (index - 1 >= 0) index - 1 else list.lastIndex
+            switchChannel(list[prevIndex])
         }
     }
 
     private fun switchChannel(channel: Channel) {
-        _currentChannel.value = channel
-        loadEpgForChannel(channel)
-
+        updateCurrentChannel(channel)
         player?.apply {
             setMediaItem(MediaItem.fromUri(channel.url))
             prepare()
@@ -143,10 +134,10 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun toggleFavorite() {
-        val current = _currentChannel.value ?: return
+        val current = _uiState.value.currentChannel ?: return
         viewModelScope.launch {
             repository.toggleFavorite(current)
-            _currentChannel.value = current.copy(isFavorite = !current.isFavorite)
+            // Update local state if needed
         }
     }
 
@@ -154,7 +145,7 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             val epgId = channel.relationId ?: channel.title
             val program = repository.getCurrentProgram(epgId)
-            _currentProgram.value = program
+            _uiState.update { it.copy(currentProgram = program) }
         }
     }
 
@@ -169,7 +160,8 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun toggleResizeMode() {
-        _resizeMode.value = (_resizeMode.value + 1) % 3
+        val newMode = (_uiState.value.resizeMode + 1) % 3
+        _uiState.update { it.copy(resizeMode = newMode) }
     }
 
     private fun startProgressTracking() {
@@ -189,7 +181,7 @@ class PlayerViewModel @Inject constructor(
 
     private fun saveCurrentProgress() {
         val p = player ?: return
-        val c = _currentChannel.value ?: return
+        val c = _uiState.value.currentChannel ?: return
         if (p.duration > 0) {
             viewModelScope.launch {
                 repository.saveProgress(c.url, p.currentPosition, p.duration)

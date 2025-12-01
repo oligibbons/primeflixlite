@@ -6,10 +6,10 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape // FIX: Import added
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Pause
@@ -45,7 +45,6 @@ fun PlayerOverlay(
     channelList: List<Channel>,
     onChannelClick: (Channel) -> Unit
 ) {
-    // We wrap everything in a Box to layer the Controls and the Channel Drawer
     Box(modifier = Modifier.fillMaxSize()) {
 
         // 1. BOTTOM CONTROLS (Standard OSD)
@@ -71,19 +70,17 @@ fun PlayerOverlay(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Play/Pause Button
                         IconButton(onClick = onPlayPause) {
                             Icon(
                                 imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                 contentDescription = null,
-                                tint = NeonYellow, // VISUAL POP
+                                tint = NeonYellow,
                                 modifier = Modifier.size(48.dp)
                             )
                         }
 
                         Spacer(modifier = Modifier.width(16.dp))
 
-                        // Progress Bar
                         if (duration > 0) {
                             val progress = currentTime.toFloat() / duration.toFloat()
                             Text(
@@ -105,7 +102,6 @@ fun PlayerOverlay(
                                 color = Color.LightGray
                             )
                         } else {
-                            // Live Stream Indication
                             Box(
                                 modifier = Modifier
                                     .background(Color.Red, MaterialTheme.shapes.small)
@@ -118,7 +114,6 @@ fun PlayerOverlay(
                 }
             }
 
-            // Back Button (Top Left)
             IconButton(
                 onClick = onBack,
                 modifier = Modifier.align(Alignment.TopStart).padding(32.dp)
@@ -127,8 +122,7 @@ fun PlayerOverlay(
             }
         }
 
-        // 2. CHANNEL DRAWER (Left Side Overlay)
-        // Slides in when user presses "Left" or toggles list
+        // 2. CHANNEL DRAWER
         AnimatedVisibility(
             visible = isChannelListVisible,
             enter = slideInHorizontally(),
@@ -187,7 +181,6 @@ fun ChannelListRow(channel: Channel, isCurrent: Boolean, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (isCurrent && !isFocused) {
-            // Equalizer icon or similar could go here
             Text("▶", color = NeonYellow, modifier = Modifier.padding(end = 8.dp))
         }
 
