@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -114,26 +115,19 @@ class HomeViewModel @Inject constructor(
                 repository.getBrowsingContent(playlist.url, type, "All")
             }
             "Favorites" -> {
-                // Since favorites is a Flow<List<Channel>>, we transform it here
-                // Note: In a real app, this logic might be better in the repo
-                // but this matches your structure.
-                kotlinx.coroutines.flow.map {
-                    // We just return empty flow here because favorites are observed separately in init block
-                    // However, to satisfy the `flow` assignment, we call repository logic
-                    emptyList<ChannelWithProgram>()
+                // Fix for ambiguity: Use kotlinx.coroutines.flow.map explicitly for the outer map
+                repository.favorites.map { favs ->
+                    favs.filter { it.playlistUrl == playlist.url && it.type == type.name }
+                        .map { ChannelWithProgram(it, null) }
                 }
-                // Correction: The original code logic for favorites was flawed in flow assignment.
-                // We will use the standard browsing content for simplicity or a direct repo call.
-                // Reverting to repository call to keep it compiling:
-                repository.getBrowsingContent(playlist.url, type, "All")
             }
             "Recently Added" -> {
                 repository.getRecentAdded(playlist.url, type)
-                    .kotlinx.coroutines.flow.map { channels -> channels.map { ChannelWithProgram(it, null) } }
+                    .map { channels -> channels.map { ChannelWithProgram(it, null) } }
             }
             "Continue Watching" -> {
                 repository.getContinueWatching(type)
-                    .kotlinx.coroutines.flow.map { progressItems ->
+                    .map { progressItems ->
                         progressItems.map { ChannelWithProgram(it.channel, null) }
                     }
             }
