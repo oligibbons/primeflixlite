@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -115,6 +116,7 @@ class HomeViewModel @Inject constructor(
                 repository.getBrowsingContent(playlist.url, type, "All")
             }
             "Favorites" -> {
+                // Fix for ambiguity: Use kotlinx.coroutines.flow.map explicitly for the outer map
                 // Return a flow that emits the list of favorites filtered by type and playlist
                 repository.favorites.map { favs ->
                     favs.filter { it.playlistUrl == playlist.url && it.type == type.name }
