@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+// Aliased import to prevent ambiguity with List.map
+import kotlinx.coroutines.flow.map as flowMap
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -109,31 +111,26 @@ class HomeViewModel @Inject constructor(
         contentJob?.cancel()
         _uiState.value = _uiState.value.copy(loadingMessage = "Loading Content...")
 
+        // Robust flow selection using flowMap
         val flow = when (category) {
             "All" -> {
                 repository.getBrowsingContent(playlist.url, type, "All")
             }
             "Favorites" -> {
-                // Since favorites is a Flow<List<Channel>>, we transform it here
-                // Note: In a real app, this logic might be better in the repo
-                // but this matches your structure.
-                kotlinx.coroutines.flow.map {
-                    // We just return empty flow here because favorites are observed separately in init block
-                    // However, to satisfy the `flow` assignment, we call repository logic
-                    emptyList<ChannelWithProgram>()
+                // outer 'flowMap' acts on the Flow
+                repository.favorites.flowMap { favs ->
+                    // inner 'filter' and 'map' act on the List
+                    favs.filter { it.playlistUrl == playlist.url && it.type == type.name }
+                        .map { ChannelWithProgram(it, null) }
                 }
-                // Correction: The original code logic for favorites was flawed in flow assignment.
-                // We will use the standard browsing content for simplicity or a direct repo call.
-                // Reverting to repository call to keep it compiling:
-                repository.getBrowsingContent(playlist.url, type, "All")
             }
             "Recently Added" -> {
                 repository.getRecentAdded(playlist.url, type)
-                    .kotlinx.coroutines.flow.map { channels -> channels.map { ChannelWithProgram(it, null) } }
+                    .flowMap { channels -> channels.map { ChannelWithProgram(it, null) } }
             }
             "Continue Watching" -> {
                 repository.getContinueWatching(type)
-                    .kotlinx.coroutines.flow.map { progressItems ->
+                    .flowMap { progressItems ->
                         progressItems.map { ChannelWithProgram(it.channel, null) }
                     }
             }
