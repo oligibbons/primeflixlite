@@ -261,7 +261,7 @@ class PrimeFlixRepository @Inject constructor(
     }
 
     // Helper used by PlayerViewModel
-    // FIX: Using the Flow-based DAO method to avoid type mismatches
+    // FIX: Calling channelDao.getVodChannels (Flow) not getChannelsByGroup (List)
     fun getVodChannels(playlistUrl: String, type: String, group: String): Flow<List<Channel>> {
         return channelDao.getVodChannels(playlistUrl, type, group)
     }

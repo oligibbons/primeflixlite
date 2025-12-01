@@ -5,7 +5,7 @@ import com.example.primeflixlite.data.local.entity.Playlist
 import com.example.primeflixlite.data.local.entity.StreamType
 import com.example.primeflixlite.data.local.model.ChannelWithProgram
 
-data class HomeUiState(
+data class HomeState(
     // UI Loading State - Null means "Not Loading"
     // We use a String so we can tell the user exactly what we are doing
     val loadingMessage: String? = null,

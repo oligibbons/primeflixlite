@@ -30,33 +30,27 @@ fun PlayerScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    // FIX: Using collectAsState() properly
     val uiState by viewModel.uiState.collectAsState()
 
-    // --- PLAYER STATE ---
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
             playWhenReady = true
         }
     }
 
-    // Initialize / Update Player Media
     LaunchedEffect(url) {
         viewModel.loadContextForUrl(url)
-
         val mediaItem = MediaItem.fromUri(url)
         exoPlayer.setMediaItem(mediaItem)
         exoPlayer.prepare()
     }
 
-    // Cleanup on Exit
     DisposableEffect(Unit) {
         onDispose {
             exoPlayer.release()
         }
     }
 
-    // Pause/Resume on lifecycle changes
     LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
         exoPlayer.pause()
     }
@@ -64,10 +58,8 @@ fun PlayerScreen(
         if (uiState.isPlaying) exoPlayer.play()
     }
 
-    // --- OSD VISIBILITY LOGIC ---
     var isOsdVisible by remember { mutableStateOf(false) }
     var isChannelListVisible by remember { mutableStateOf(false) }
-
     val coroutineScope = rememberCoroutineScope()
     var hideJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 

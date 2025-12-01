@@ -21,13 +21,12 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-// Combined UI State for the Screen
 data class PlayerUiState(
     val currentChannel: Channel? = null,
     val currentProgram: Programme? = null,
     val isPlaying: Boolean = true,
     val resizeMode: Int = 0,
-    val playlistContext: List<Channel> = emptyList() // The "neighbors" for the drawer
+    val playlistContext: List<Channel> = emptyList()
 )
 
 @HiltViewModel
@@ -43,16 +42,13 @@ class PlayerViewModel @Inject constructor(
 
     private var progressJob: Job? = null
 
-    // Called by PlayerScreen to setup data
     fun loadContextForUrl(url: String) {
         viewModelScope.launch {
             val channel = repository.getChannelByUrl(url)
             if (channel != null) {
-                // Set initial channel
                 _uiState.update { it.copy(currentChannel = channel) }
                 loadEpgForChannel(channel)
 
-                // Load siblings for the drawer
                 try {
                     repository.getVodChannels(
                         playlistUrl = channel.playlistUrl,
@@ -99,7 +95,6 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    // Called for channel zapping (Prev/Next)
     fun nextChannel() {
         val current = _uiState.value.currentChannel ?: return
         val list = _uiState.value.playlistContext
@@ -137,7 +132,6 @@ class PlayerViewModel @Inject constructor(
         val current = _uiState.value.currentChannel ?: return
         viewModelScope.launch {
             repository.toggleFavorite(current)
-            // Update local state if needed
         }
     }
 
