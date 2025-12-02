@@ -6,7 +6,6 @@ import com.example.primeflixlite.data.local.PrimeFlixDatabase
 import com.example.primeflixlite.data.local.dao.*
 import com.example.primeflixlite.data.local.entity.*
 import com.example.primeflixlite.data.local.model.ChannelWithProgram
-import com.example.primeflixlite.data.local.model.ProgramProgress
 import com.example.primeflixlite.data.parser.m3u.M3UParser
 import com.example.primeflixlite.data.parser.m3u.toChannel
 import com.example.primeflixlite.data.parser.xmltv.XmltvParser

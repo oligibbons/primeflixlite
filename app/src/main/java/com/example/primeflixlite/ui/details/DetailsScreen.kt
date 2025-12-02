@@ -6,7 +6,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,7 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -38,7 +37,7 @@ import com.example.primeflixlite.ui.theme.VoidBlack
 
 @Composable
 fun DetailsScreen(
-    channel: Channel, // Placeholder passed from nav
+    channel: Channel,
     viewModel: DetailsViewModel,
     imageLoader: coil.ImageLoader,
     onPlayClick: (String) -> Unit,
@@ -64,21 +63,23 @@ fun DetailsScreen(
                 CircularProgressIndicator(color = NeonBlue)
             }
         } else {
+            // Safe fallback for channel
             val currentChannel = uiState.channel ?: channel
             val metadata = uiState.metadata
 
             // Background Backdrop
-            if (!metadata?.backdrop.isNullOrEmpty()) {
+            // FIX: Access 'backdropPath' instead of 'backdrop'
+            if (!metadata?.backdropPath.isNullOrEmpty()) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(metadata?.backdrop)
+                        .data(metadata?.backdropPath)
                         .crossfade(true)
                         .size(1280, 720) // Limit size for memory
                         .build(),
                     imageLoader = imageLoader,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().alpha(0.3f) // Dimmed
+                    modifier = Modifier.fillMaxSize().alpha(0.3f)
                 )
             }
 
@@ -133,13 +134,19 @@ fun DetailsScreen(
                     )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text(text = metadata?.year ?: "", color = Color.Gray)
-                        Text(text = metadata?.rating ?: "", color = NeonBlue)
+                        // Safe access to metadata fields
+                        if (metadata != null) {
+                            // FIX: Use 'releaseDate' and take first 4 chars for Year
+                            Text(text = metadata.releaseDate?.take(4) ?: "", color = Color.Gray)
+                            // FIX: Use 'voteAverage' instead of 'rating'
+                            Text(text = "★ ${metadata.voteAverage}", color = NeonBlue)
+                        }
                         Text(text = currentChannel.quality ?: "HD", color = Color.Gray)
                     }
 
+                    // FIX: Use 'overview' instead of 'plot'
                     Text(
-                        text = metadata?.plot ?: "No description available.",
+                        text = metadata?.overview ?: "No description available.",
                         color = Color.LightGray,
                         maxLines = 4,
                         lineHeight = 24.sp,
@@ -238,7 +245,7 @@ fun VersionChip(text: String, onClick: () -> Unit) {
 
 // Helper Modifier for Alpha
 fun Modifier.alpha(alpha: Float) = this.then(
-    Modifier.draw.drawWithContent {
+    Modifier.drawWithContent {
         drawContent()
         drawRect(Color.Black, alpha = 1f - alpha, blendMode = androidx.compose.ui.graphics.BlendMode.DstIn)
     }

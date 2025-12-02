@@ -18,7 +18,11 @@ data class DetailsUiState(
     val episodes: List<XtreamChannelInfo.Episode> = emptyList(),
     val error: String? = null,
     val metadata: MediaMetadata? = null,
-    val versions: List<Channel> = emptyList()
+    // Renamed from 'versions' to match DetailsScreen.kt requirements
+    val relatedVersions: List<Channel> = emptyList(),
+    // Added to satisfy DetailsScreen.kt requirements
+    val channel: Channel? = null,
+    val isFavorite: Boolean = false
 )
 
 @HiltViewModel
@@ -36,6 +40,12 @@ class DetailsViewModel @Inject constructor(
 
     fun loadContent(channel: Channel) {
         _currentChannel.value = channel
+        // Sync to UI state
+        _uiState.value = _uiState.value.copy(
+            channel = channel,
+            isFavorite = channel.isFavorite
+        )
+
         fetchMetadata(channel)
 
         if (channel.type == StreamType.SERIES.name) {
@@ -58,7 +68,13 @@ class DetailsViewModel @Inject constructor(
         val current = _currentChannel.value ?: return
         viewModelScope.launch {
             repository.toggleFavorite(current)
-            _currentChannel.value = current.copy(isFavorite = !current.isFavorite)
+            val updated = current.copy(isFavorite = !current.isFavorite)
+            _currentChannel.value = updated
+            // Update UI State immediately for the star icon
+            _uiState.value = _uiState.value.copy(
+                channel = updated,
+                isFavorite = updated.isFavorite
+            )
         }
     }
 
@@ -80,9 +96,9 @@ class DetailsViewModel @Inject constructor(
                     channel.canonicalTitle
                 )
                 val finalVersions = if (versions.isNotEmpty()) versions else listOf(channel)
-                _uiState.value = _uiState.value.copy(versions = finalVersions)
+                _uiState.value = _uiState.value.copy(relatedVersions = finalVersions)
             } else {
-                _uiState.value = _uiState.value.copy(versions = listOf(channel))
+                _uiState.value = _uiState.value.copy(relatedVersions = listOf(channel))
             }
         }
     }
@@ -94,15 +110,16 @@ class DetailsViewModel @Inject constructor(
                 val seriesId = channel.streamId.toIntOrNull() ?: 0
                 if (seriesId != 0) {
                     val episodes = repository.getSeriesEpisodes(channel.playlistUrl, seriesId)
+
+                    // Logic to set default season
+                    episodes.minByOrNull { it.season }?.let {
+                        selectedSeason = it.season
+                    }
+
                     _uiState.value = _uiState.value.copy(
                         episodes = episodes,
                         isLoading = false
                     )
-
-                    // FIX: Use 'season' instead of 'seasonNum'
-                    episodes.minByOrNull { it.season }?.let {
-                        selectedSeason = it.season
-                    }
                 } else {
                     _uiState.value = _uiState.value.copy(
                         error = "Invalid Series ID",
@@ -119,12 +136,10 @@ class DetailsViewModel @Inject constructor(
     }
 
     fun getSeasons(): List<Int> {
-        // FIX: Use 'season'
         return uiState.value.episodes.map { it.season }.distinct().sorted()
     }
 
     fun getEpisodesForSeason(season: Int): List<XtreamChannelInfo.Episode> {
-        // FIX: Use 'season'
         return uiState.value.episodes
             .filter { it.season == season }
             .sortedBy { it.episodeNum }

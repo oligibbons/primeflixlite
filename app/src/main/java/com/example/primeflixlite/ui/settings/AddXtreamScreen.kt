@@ -20,8 +20,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.primeflixlite.R
 import com.example.primeflixlite.ui.components.LoadingOverlay
+import com.example.primeflixlite.ui.components.NeonButton
 import com.example.primeflixlite.ui.components.NeonTextField
-import com.example.primeflixlite.ui.details.NeonButton
 import com.example.primeflixlite.ui.theme.NeonBlue
 import com.example.primeflixlite.ui.theme.VoidBlack
 

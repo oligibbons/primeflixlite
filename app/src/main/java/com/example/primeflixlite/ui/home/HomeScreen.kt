@@ -39,7 +39,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.primeflixlite.data.local.entity.Channel
@@ -208,13 +207,15 @@ fun HomeScreen(
                 Column(modifier = Modifier.fillMaxSize()) {
 
                     if (uiState.favorites.isNotEmpty()) {
+                        // FIX: Pass uiState.favorites directly, as it is already List<Channel>
                         ContinueWatchingLane(
                             title = "My List",
-                            items = uiState.favorites.map { it.channel },
+                            items = uiState.favorites,
                             imageLoader = imageLoader,
                             onItemClick = { url ->
-                                val channel = uiState.favorites.find { it.channel.url == url }
-                                if (channel != null) onChannelClick(channel.channel)
+                                // FIX: Search directly in favorites, as it contains Channels
+                                val channel = uiState.favorites.find { it.url == url }
+                                if (channel != null) onChannelClick(channel)
                             }
                         )
                     }
@@ -381,142 +382,5 @@ fun CategoryPill(title: String, isSelected: Boolean, onClick: () -> Unit) {
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         Text(text = title, color = text, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-// ============================================================================================
-// ADDED IMPLEMENTATIONS FOR MISSING COMPOSABLES TO ENSURE COMPILATION
-// ============================================================================================
-
-@Composable
-fun ContinueWatchingLane(
-    title: String,
-    items: List<Channel>,
-    imageLoader: coil.ImageLoader,
-    onItemClick: (String) -> Unit
-) {
-    Column(modifier = Modifier.padding(bottom = 24.dp)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge,
-            color = Color.White,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            items(items) { channel ->
-                var isFocused by remember { mutableStateOf(false) }
-                val scale = if (isFocused) 1.1f else 1f
-                val borderColor = if (isFocused) NeonBlue else Color.Transparent
-
-                Box(
-                    modifier = Modifier
-                        .width(200.dp)
-                        .aspectRatio(16f / 9f)
-                        .scale(scale)
-                        .clip(RoundedCornerShape(8.dp))
-                        .border(BorderStroke(2.dp, borderColor), RoundedCornerShape(8.dp))
-                        .background(Color(0xFF1E1E1E))
-                        .clickable { onItemClick(channel.url) }
-                        .onFocusChanged { isFocused = it.isFocused }
-                        .focusable()
-                ) {
-                    if (!channel.cover.isNullOrEmpty()) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(channel.cover)
-                                .crossfade(true)
-                                .size(200, 112)
-                                .build(),
-                            imageLoader = imageLoader,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(text = channel.title.take(1), color = Color.Gray, fontSize = 24.sp)
-                        }
-                    }
-
-                    // Gradient overlay for text readability
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                androidx.compose.ui.graphics.Brush.verticalGradient(
-                                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))
-                                )
-                            )
-                    )
-
-                    Text(
-                        text = channel.title,
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(8.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun MovieCard(
-    channel: Channel,
-    imageLoader: coil.ImageLoader,
-    onClick: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-    val scale = if (isFocused) 1.05f else 1f
-    val borderColor = if (isFocused) NeonBlue else Color.Transparent
-
-    Column(
-        modifier = Modifier
-            .width(140.dp)
-            .scale(scale)
-            .clip(RoundedCornerShape(8.dp))
-            .border(BorderStroke(2.dp, borderColor), RoundedCornerShape(8.dp))
-            .clickable { onClick() }
-            .onFocusChanged { isFocused = it.isFocused }
-            .focusable()
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(2f / 3f) // Poster aspect ratio
-                .background(Color(0xFF1E1E1E))
-        ) {
-            if (!channel.cover.isNullOrEmpty()) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(channel.cover)
-                        .crossfade(true)
-                        .size(140, 210)
-                        .build(),
-                    imageLoader = imageLoader,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray)
-                }
-            }
-        }
-        Text(
-            text = channel.title,
-            color = if (isFocused) Color.White else Color.Gray,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(8.dp)
-        )
     }
 }

@@ -13,7 +13,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
@@ -42,7 +42,6 @@ class PlayerViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState = _uiState.asStateFlow()
 
-    // Using your full repo, we can fetch the channel context
     private var currentChannel: Channel? = null
 
     data class PlayerUiState(
@@ -65,11 +64,6 @@ class PlayerViewModel @Inject constructor(
                 currentChannel = repository.getChannelByUrl(videoUrl)
                 currentChannel?.let {
                     _uiState.value = _uiState.value.copy(videoTitle = it.title)
-
-                    // Restore progress if VOD
-                    if (it.type != "LIVE") {
-                        // Logic to seek to resume position could go here
-                    }
                 }
             }
         }
@@ -87,7 +81,7 @@ class PlayerViewModel @Inject constructor(
             val trackSelector = DefaultTrackSelector(getApplication())
             trackSelector.setParameters(
                 trackSelector.buildUponParameters()
-                    .setMaxVideoSizeSd() // Prefer SD on 1GB RAM if available to prevent OOM/Stutter
+                    .setMaxVideoSizeSd() // Prefer SD on 1GB RAM if available
                     .setForceLowestBitrate(false)
             )
 
@@ -117,12 +111,10 @@ class PlayerViewModel @Inject constructor(
             .setConnectTimeoutMs(8000)
             .setReadTimeoutMs(8000)
 
-        val type = androidx.media3.common.util.Util.inferContentType(uri)
-        return if (type == C.CONTENT_TYPE_HLS) {
-            HlsMediaSource.Factory(dataSourceFactory).createMediaSource(MediaItem.fromUri(uri))
-        } else {
-            ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(MediaItem.fromUri(uri))
-        }
+        // Using DefaultMediaSourceFactory handles HLS, DASH, and SS automatically if modules are present
+        // without needing explicit compile-time references to HlsMediaSource.
+        return DefaultMediaSourceFactory(dataSourceFactory)
+            .createMediaSource(MediaItem.fromUri(uri))
     }
 
     private val playerListener = object : Player.Listener {

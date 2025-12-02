@@ -109,7 +109,6 @@ fun ContinueWatchingCard(
             }
         }
 
-        // FIXED: Use lambda for progress to silence deprecation warning
         LinearProgressIndicator(
             progress = { 0.5f },
             modifier = Modifier.fillMaxWidth().height(4.dp),
